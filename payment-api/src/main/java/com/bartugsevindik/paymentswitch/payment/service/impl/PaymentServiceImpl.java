@@ -6,6 +6,7 @@
 package com.bartugsevindik.paymentswitch.payment.service.impl;
 
 import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
+import com.bartugsevindik.paymentswitch.common.event.PaymentRequestedEvent;
 import com.bartugsevindik.paymentswitch.common.exception.BadRequestException;
 import com.bartugsevindik.paymentswitch.common.exception.NotFoundException;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentCreateRequest;
@@ -19,6 +20,7 @@ import com.bartugsevindik.paymentswitch.payment.idempotency.lock.IdempotencyLock
 import com.bartugsevindik.paymentswitch.payment.idempotency.lock.LockResult;
 import com.bartugsevindik.paymentswitch.payment.idempotency.service.IdempotencyService;
 import com.bartugsevindik.paymentswitch.payment.mapper.PaymentMapper;
+import com.bartugsevindik.paymentswitch.payment.outbox.service.OutboxService;
 import com.bartugsevindik.paymentswitch.payment.repository.PaymentRepository;
 import com.bartugsevindik.paymentswitch.payment.service.PaymentService;
 import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalPrincipal;
@@ -30,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,13 +47,14 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentMapper paymentMapper;
     private final IdempotencyService idempotencyService;
     private final IdempotencyLock idempotencyLock;
+    private final OutboxService outboxService;
     private final TransactionTemplate transactionTemplate;
 
     /**
      * <h1>Ödeme Oluşturma</h1>
      * <p>Ödemeyi {@code PENDING} durumunda kaydeder. Bankaya gönderim asenkron yapılır,
      * sonuç {@link #getPayment(TerminalPrincipal, String)} ile sorgulanır.</p>
-     * <p>Akış: önceki kayıt var mı → Redis kilidi → (payment + idempotency kaydı tek transaction) → kilidi bırak.
+     * <p>Akış: önceki kayıt var mı → Redis kilidi → (payment + idempotency kaydı + outbox event tek transaction) → kilidi bırak.
      * Transaction bilinçli olarak metodun tamamını kapsamaz; kilit beklenirken DB connection tutulmaz.</p>
      *
      * @param terminal       İmzası doğrulanmış terminal
@@ -125,11 +129,26 @@ public class PaymentServiceImpl implements PaymentService {
 
         Payment saved = paymentRepository.save(payment);
         idempotencyService.saveRecord(context, RESOURCE_TYPE, saved.getPaymentId());
+        // Kafka'ya doğrudan yazılmaz; ödeme commit olmadan event gitmez, event gitmeden ödeme kaybolmaz
+        outboxService.enqueue(RESOURCE_TYPE, saved.getPaymentId(), PaymentRequestedEvent.TOPIC, toRequestedEvent(saved));
         log.info("Payment created. paymentId={}, merchantId={}, amount={}, installment={}",
                 saved.getPaymentId(), saved.getMerchantId(), saved.getMoney(), saved.getInstallmentCount());
 
-        // TODO: PS-3 ile outbox kaydı aynı transaction içinde atılacak
         return paymentMapper.toDto(saved);
+    }
+
+    private PaymentRequestedEvent toRequestedEvent(Payment payment) {
+        return new PaymentRequestedEvent(
+                payment.getPaymentId(),
+                payment.getMerchantId(),
+                payment.getTerminalId(),
+                payment.getTerminalType(),
+                payment.getCardBin(),
+                payment.getCardLast4(),
+                payment.getAmount(),
+                payment.getCurrency(),
+                payment.getInstallmentCount(),
+                Instant.now());
     }
 
     /**

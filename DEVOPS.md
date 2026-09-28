@@ -80,6 +80,8 @@ scripts/pos-request.sh POST /v1/payments \
 | `IDEMPOTENCY_RECORD_TTL` / `IDEMPOTENCY_LOCK_TTL` | `24h` / `10s` | |
 | `TERMINAL_SECRET_MASTER_KEY` | lokal için sabit bir key | Terminal secret'larını şifreleyen AES-256 key (Base64, 32 byte). `openssl rand -base64 32`. **Production'da zorunlu**, KMS/Vault'tan gelmeli. |
 | `TERMINAL_TIMESTAMP_TOLERANCE` | `5m` | Terminal saati ile sunucu saati arasındaki izin verilen fark |
+| `OUTBOX_POLL_INTERVAL` | `200ms` | Outbox relay'in Kafka'ya gönderim aralığı |
+| `KAFKA_TOPIC_PARTITIONS` / `KAFKA_TOPIC_REPLICAS` | `6` / `1` | Uygulamanın açılışta oluşturduğu topic'ler için. Production'da replicas en az 3 olmalı. |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
 
 ## 📊 İzleme
@@ -87,6 +89,25 @@ scripts/pos-request.sh POST /v1/payments \
 - Health: `GET /actuator/health/liveness`, `GET /actuator/health/readiness`
 - Metrikler: `GET /actuator/prometheus`
 - Kafka consumer lag: Kafka UI > Consumers
+
+### Outbox
+
+| Metrik | Anlamı | Alarm önerisi |
+|---|---|---|
+| `outbox_pending_events` | Kafka'ya gönderilmeyi bekleyen event sayısı | Sürekli artıyorsa |
+| `outbox_oldest_pending_seconds` | En eski bekleyen event'in yaşı | > 30 sn: ödemeler bankaya gitmiyor |
+
+```bash
+# Bekleyen event'ler ve son hata
+docker exec ps-postgres psql -U payment -d payment_switch \
+  -c "select aggregate_id, attempts, last_error, created_date from outbox_event where published_at is null order by id limit 20"
+
+# Topic'teki mesajları header'larıyla izleme
+docker exec ps-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic payment.requested --from-beginning --property print.key=true --property print.headers=true
+```
+
+Kafka kapalıyken ödeme alınmaya devam eder. Event'ler outbox'ta birikir ve Kafka geri geldiğinde sırayla gönderilir.
 - Prometheus, Grafana ve Jaeger PS-8 ile eklenecek.
 
 ## 🚀 Deploy

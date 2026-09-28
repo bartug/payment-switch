@@ -7,6 +7,7 @@ package com.bartugsevindik.paymentswitch.payment.support;
 
 import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
 import com.bartugsevindik.paymentswitch.payment.controller.PaymentController;
+import com.bartugsevindik.paymentswitch.payment.outbox.relay.OutboxRelay;
 import com.bartugsevindik.paymentswitch.payment.terminal.dto.TerminalCreateRequest;
 import com.bartugsevindik.paymentswitch.payment.terminal.dto.TerminalDTO;
 import com.bartugsevindik.paymentswitch.payment.terminal.security.RequestSigner;
@@ -23,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.kafka.KafkaContainer;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -35,7 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * Container'lar tüm test sınıfları için bir kez açılır (singleton container pattern).
  * Her sınıfta yeniden açılsaydı Spring context cache'i de işe yaramazdı.
  */
-@SpringBootTest
+@SpringBootTest(properties = "application.scheduling.enabled=false")
 @AutoConfigureMockMvc
 public abstract class AbstractIntegrationTest {
 
@@ -45,9 +47,14 @@ public abstract class AbstractIntegrationTest {
     @ServiceConnection(name = "redis")
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
 
+    // JVM'siz (GraalVM native) imaj; hızlı açılır, Apple M4'teki JDK SVE sorunundan etkilenmez
+    @ServiceConnection
+    protected static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.1");
+
     static {
         POSTGRES.start();
         REDIS.start();
+        KAFKA.start();
     }
 
     protected static final String VALID_REQUEST = """
@@ -70,6 +77,9 @@ public abstract class AbstractIntegrationTest {
 
     @Autowired
     protected TerminalService terminalService;
+
+    @Autowired
+    protected OutboxRelay outboxRelay;
 
     public record TestTerminal(String terminalId, String merchantId, String secret) {
     }
