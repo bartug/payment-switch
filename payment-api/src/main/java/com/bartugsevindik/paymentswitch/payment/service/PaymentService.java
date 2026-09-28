@@ -5,6 +5,7 @@
 
 package com.bartugsevindik.paymentswitch.payment.service;
 
+import com.bartugsevindik.paymentswitch.common.event.BankAuthorizationResultEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRoutingResultEvent;
 import com.bartugsevindik.paymentswitch.messaging.consumer.IncomingEvent;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentCreateRequest;
@@ -60,4 +61,14 @@ public interface PaymentService {
      * @since 28.09.2026 - PS-4
      */
     void applyRoutingResult(IncomingEvent<PaymentRoutingResultEvent> event);
+
+    /**
+     * <h1>Banka Sonucunu İşleme</h1>
+     * <p>bank-adapter'ın bildirdiği sonuca göre ödemenin durumunu günceller ve kart verisini siler.</p>
+     *
+     * @param event {@code payment.bank.results} topic'inden gelen event
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 28.09.2026 - PS-5
+     */
+    void applyBankResult(IncomingEvent<BankAuthorizationResultEvent> event);
 }

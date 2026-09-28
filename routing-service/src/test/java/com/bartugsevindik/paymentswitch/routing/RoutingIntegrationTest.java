@@ -7,6 +7,7 @@ package com.bartugsevindik.paymentswitch.routing;
 
 import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
+import com.bartugsevindik.paymentswitch.common.event.BankHealthChangedEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRequestedEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRoutingResultEvent;
 import com.bartugsevindik.paymentswitch.messaging.MessageHeaders;
@@ -75,6 +76,7 @@ class RoutingIntegrationTest {
     void activateAllBanks() {
         for (BankCode bank : BankCode.values()) {
             acquirerBankService.updateBankStatus(bank, true);
+            acquirerBankService.updateBankHealth(bank, true);
         }
     }
 
@@ -132,6 +134,25 @@ class RoutingIntegrationTest {
     }
 
     @Test
+    void circuitAcilincaBankaOtomatikDevreDisiKalir() throws Exception {
+        publishHealth(BankCode.YKB, false, "OPEN");
+        await().atMost(Duration.ofSeconds(15)).until(() -> acquirerBankService.getActiveBanks().stream()
+                .noneMatch(bank -> bank.bankCode() == BankCode.YKB));
+
+        String single = publish(UUID.randomUUID().toString(), "54006170", 1);
+        String installment = publish(UUID.randomUUID().toString(), "54006170", 3);
+        assertThat(awaitDecision(single).getBankCode()).isEqualTo(BankCode.QNB);
+        assertThat(awaitDecision(installment).getReason()).isEqualTo(RoutingReason.PROGRAM_BANK_UNAVAILABLE);
+
+        publishHealth(BankCode.YKB, true, "CLOSED");
+        await().atMost(Duration.ofSeconds(15)).until(() -> acquirerBankService.getActiveBanks().stream()
+                .anyMatch(bank -> bank.bankCode() == BankCode.YKB));
+        // Operasyonun aktif/pasif kararı sağlık durumundan bağımsız
+        assertThat(acquirerBankService.getAllBanks().stream().filter(b -> b.bankCode() == BankCode.YKB).findFirst()
+                .orElseThrow().active()).isTrue();
+    }
+
+    @Test
     void ayniEventIkiKezGelirseTekKararVerilir() {
         String eventId = UUID.randomUUID().toString();
         String paymentId = publish(eventId, "411111", 1);
@@ -166,7 +187,7 @@ class RoutingIntegrationTest {
 
     private void publishWithId(String eventId, String paymentId, String bin, int installment) {
         PaymentRequestedEvent event = new PaymentRequestedEvent(paymentId, "MRC0000001", "TRM00000001",
-                TerminalType.VIRTUAL, bin, "2306", 125050, "TRY", installment, Instant.now());
+                TerminalType.VIRTUAL, bin, "2306", UUID.randomUUID().toString(), 125050, "TRY", installment, Instant.now());
         try {
             ProducerRecord<String, String> record = new ProducerRecord<>(PaymentRequestedEvent.TOPIC, paymentId,
                     objectMapper.writeValueAsString(event));
@@ -175,6 +196,13 @@ class RoutingIntegrationTest {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private void publishHealth(BankCode bank, boolean healthy, String state) throws Exception {
+        ProducerRecord<String, String> record = new ProducerRecord<>(BankHealthChangedEvent.TOPIC, bank.name(),
+                objectMapper.writeValueAsString(new BankHealthChangedEvent(bank, healthy, state, Instant.now())));
+        record.headers().add(MessageHeaders.EVENT_ID, UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8));
+        kafkaTemplate.send(record).get();
     }
 
     private RoutingDecision awaitDecision(String paymentId) {

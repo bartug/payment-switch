@@ -18,10 +18,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(name = "AcquirerBankInfo", description = "İşlem gönderilebilen banka")
 public record AcquirerBankInfo(
         @Schema(description = "Banka kodu", example = "YKB") BankCode bankCode,
-        @Schema(description = "Aktif mi", example = "true") boolean active,
+        @Schema(description = "Operasyon tarafından aktif mi", example = "true") boolean active,
+        @Schema(description = "Circuit breaker'a göre sağlıklı mı (otomatik)", example = "true") boolean healthy,
         @Schema(description = "On-us komisyon (baz puan)", example = "180") int onUsRateBps,
         @Schema(description = "Off-us komisyon (baz puan)", example = "220") int offUsRateBps
 ) {
+
+    public boolean canReceive() {
+        return active && healthy;
+    }
 
     public int rateFor(BankCode issuerBank) {
         return bankCode == issuerBank ? onUsRateBps : offUsRateBps;

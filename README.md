@@ -7,14 +7,17 @@ Param ve MoneyPay entegrasyonlarında ödemeyi sağlayıcının API'sine gönder
 kısmı yazıyorum: idempotency, asenkron dağıtım, banka bazlı izolasyon, timeout ve reversal yönetimi, mutabakat.
 
 ```
-POS ──► payment-api ──► Kafka ──► routing-service ──► bank.requests.{BANKA} ──► bank-adapter ──► Banka
-             ▲                                                                        │
-             └──────────────────────── payment.results ◄──────────────────────────────┘
+POS ──► payment-api ──► payment.requested ──► routing-service ──► bank.requests.{BANKA} ──► bank-adapter ──► Banka
+         │  ▲  ▲                                   │  ▲                                       │  │
+         │  │  └──────── payment.routing.results ◄─┘  └───────────── bank.health ◄───────────┘  │
+         │  └─────────────────────────── payment.bank.results ◄───────────────────────────────┘
+         └── card vault (kart verisi Kafka'ya yazılmaz) ◄── detokenize ── bank-adapter
 ```
 
 Detaylı akış: [docs/02-odeme-akisi.md](docs/02-odeme-akisi.md) · Domain sözlüğü: [docs/01-domain-sozlugu.md](docs/01-domain-sozlugu.md) ·
 Terminal entegrasyonu: [docs/03-terminal-kimlik-dogrulama.md](docs/03-terminal-kimlik-dogrulama.md) ·
 Routing: [docs/04-routing.md](docs/04-routing.md) ·
+Banka entegrasyonu: [docs/05-banka-entegrasyonu.md](docs/05-banka-entegrasyonu.md) ·
 Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
 
 ## 1. Geliştirme Ortamı
@@ -29,9 +32,12 @@ docker compose up -d
 ./mvnw install -DskipTests
 ./mvnw -pl payment-api spring-boot:run
 ./mvnw -pl routing-service spring-boot:run
+./mvnw -pl bank-adapter spring-boot:run
+./mvnw -pl bank-simulator spring-boot:run
 ```
 
-Swagger: http://localhost:8081/swagger-ui.html (payment-api) · http://localhost:8082/swagger-ui.html (routing-service)
+Swagger: [payment-api](http://localhost:8081/swagger-ui.html) · [routing-service](http://localhost:8082/swagger-ui.html) ·
+[bank-adapter](http://localhost:8083/swagger-ui.html) · [bank-simulator](http://localhost:8090/swagger-ui.html)
 
 ## 2. Modüller
 
@@ -41,8 +47,8 @@ Swagger: http://localhost:8081/swagger-ui.html (payment-api) · http://localhost
 | `messaging` | - | Outbox, inbox, event okuma, retry ve DLT (Spring Boot auto-configuration) |
 | `payment-api` | 8081 | Ödeme karşılama, idempotency, durum yönetimi |
 | `routing-service` | 8082 | BIN çözümleme, kural zinciri ile banka seçimi, failover |
-| `bank-adapter` | 8083 | Banka protokol dönüşümü, timeout, reversal |
-| `bank-simulator` | 8090 | Sahte banka API'leri ve hata senaryoları |
+| `bank-adapter` | 8083 | Bankaya gönderim, circuit breaker, bulkhead, inquiry ve reversal, banka sağlık bildirimi |
+| `bank-simulator` | 8090 | Sahte banka API'leri (authorize, inquiry, reversal, echo) ve chaos senaryoları |
 
 ## 3. Yol Haritası
 
@@ -54,15 +60,17 @@ Swagger: http://localhost:8081/swagger-ui.html (payment-api) · http://localhost
 | PS-2 | Terminal HMAC imzası ([ADR-003](docs/adr/ADR-003-terminal-hmac-imza.md)) | ✅ |
 | PS-3 | Transactional outbox, Kafka ([ADR-004](docs/adr/ADR-004-transactional-outbox.md)) | ✅ |
 | PS-4 | BIN tabanlı routing, kural zinciri, inbox, DLT ([ADR-005](docs/adr/ADR-005-routing-ve-consumer-tasarimi.md)) | ✅ |
-| PS-5 | Bank adapter, resilience, inquiry ve reversal | ⏳ |
-| PS-6 | Sonuç işleme, webhook, void ve refund | |
+| PS-5 | Card vault, bank adapter, circuit breaker, inquiry ve reversal ([ADR-006](docs/adr/ADR-006-banka-entegrasyonu-ve-cevapsiz-islemler.md)) | ✅ |
+| PS-6 | Merchant webhook, void ve refund | ⏳ |
 | PS-7 | Double-entry ledger, mutabakat | |
 | PS-8 | Ölçekleme, OpenTelemetry, Gatling | |
 
 ## 4. Kod Kalitesi
 
 - Para her zaman `Money` ile ve en küçük birim (kuruş) cinsinden `long` olarak taşınır. `double` ve `float` kullanılmaz.
-- Kart numarası ve CVV **saklanmaz, loglanmaz**. Sadece BIN ve son 4 hane tutulur.
+- Kart verisi Kafka'ya **asla yazılmaz**. Bankaya gönderilene kadar card vault'ta şifreli durur, banka cevabıyla silinir. Log'a düşmez.
+- Timeout olan satış isteği **asla retry edilmez**; inquiry ve reversal ile netleştirilir.
+- Dış servis çağrıları DB transaction'ı içinde yapılmaz.
 - Ödeme durumu sadece `Payment.changeStatus` üzerinden değişir.
 - Her faz kendi branch'inde geliştirilir, testler yeşil olmadan main'e alınmaz.
 

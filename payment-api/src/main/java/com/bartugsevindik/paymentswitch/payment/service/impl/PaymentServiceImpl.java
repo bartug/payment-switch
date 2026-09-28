@@ -6,6 +6,8 @@
 package com.bartugsevindik.paymentswitch.payment.service.impl;
 
 import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
+import com.bartugsevindik.paymentswitch.common.enums.BankResultStatus;
+import com.bartugsevindik.paymentswitch.common.event.BankAuthorizationResultEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRequestedEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRoutingResultEvent;
 import com.bartugsevindik.paymentswitch.messaging.consumer.IncomingEvent;
@@ -27,6 +29,8 @@ import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxService;
 import com.bartugsevindik.paymentswitch.payment.repository.PaymentRepository;
 import com.bartugsevindik.paymentswitch.payment.service.PaymentService;
 import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalPrincipal;
+import com.bartugsevindik.paymentswitch.payment.vault.dto.CardData;
+import com.bartugsevindik.paymentswitch.payment.vault.service.CardVaultService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -53,6 +57,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final IdempotencyLock idempotencyLock;
     private final OutboxService outboxService;
     private final InboxService inboxService;
+    private final CardVaultService cardVaultService;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -161,6 +166,61 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.getPaymentId(), payment.getPaymentStatus(), result.bankCode(), result.reason());
     }
 
+    /**
+     * <h1>Banka Sonucunu İşleme</h1>
+     * <p>bank-adapter'ın bildirdiği sonuca göre ödemenin durumunu günceller. Aynı ödeme için önce {@code UNKNOWN},
+     * inquiry sonrası {@code APPROVED} ya da {@code REVERSED} gelebilir.</p>
+     * <p>İlk banka sonucuyla birlikte kart verisi silinir; sonraki adımlar (inquiry, reversal) sipariş numarası ile yapılır.</p>
+     *
+     * @param event {@code payment.bank.results} topic'inden gelen event
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 28.09.2026 - PS-5
+     */
+    @Override
+    @Transactional
+    public void applyBankResult(@NotNull IncomingEvent<BankAuthorizationResultEvent> event) {
+        BankAuthorizationResultEvent result = event.payload();
+        if (!inboxService.markProcessed(event.eventId(), CONSUMER)) {
+            return;
+        }
+
+        Payment payment = paymentRepository.findByPaymentId(result.paymentId())
+                .orElseThrow(() -> new NotFoundException("Ödeme", "paymentId", result.paymentId()));
+        cardVaultService.purge(payment.getPaymentId());
+
+        PaymentStatus target = toPaymentStatus(result.status());
+        if (payment.getPaymentStatus() == target) {
+            return;
+        }
+        if (!payment.getPaymentStatus().canTransitionTo(target)) {
+            // Örn. APPROVED olmuş ödeme için gecikmiş bir UNKNOWN gelirse; kaydı geri almak para kaybına yol açardı
+            log.warn("Bank result ignored, invalid transition. paymentId={}, current={}, result={}",
+                    payment.getPaymentId(), payment.getPaymentStatus(), result.status());
+            return;
+        }
+
+        payment.setBankCode(result.bankCode());
+        payment.setResponseCode(result.responseCode());
+        payment.setAuthCode(result.authCode());
+        payment.setRrn(result.rrn());
+        if (target == PaymentStatus.FAILED || target == PaymentStatus.DECLINED) {
+            payment.setFailureReason(result.message());
+        }
+        payment.changeStatus(target);
+        log.info("Bank result applied. paymentId={}, status={}, bank={}, responseCode={}",
+                payment.getPaymentId(), target, result.bankCode(), result.responseCode());
+    }
+
+    private static PaymentStatus toPaymentStatus(BankResultStatus status) {
+        return switch (status) {
+            case APPROVED -> PaymentStatus.APPROVED;
+            case DECLINED -> PaymentStatus.DECLINED;
+            case UNKNOWN -> PaymentStatus.UNKNOWN;
+            case REVERSED -> PaymentStatus.REVERSED;
+            case FAILED -> PaymentStatus.FAILED;
+        };
+    }
+
     private PaymentDTO persistPayment(TerminalPrincipal terminal, IdempotencyContext context, PaymentCreateRequest request) {
         Payment payment = paymentMapper.toEntity(request);
         payment.setPaymentId(UUID.randomUUID().toString());
@@ -171,15 +231,17 @@ public class PaymentServiceImpl implements PaymentService {
 
         Payment saved = paymentRepository.save(payment);
         idempotencyService.saveRecord(context, RESOURCE_TYPE, saved.getPaymentId());
+        String cardToken = cardVaultService.store(saved.getPaymentId(), new CardData(
+                request.getCardNumber(), request.getExpiryMonth(), request.getExpiryYear(), request.getCvv()));
         // Kafka'ya doğrudan yazılmaz; ödeme commit olmadan event gitmez, event gitmeden ödeme kaybolmaz
-        outboxService.enqueue(RESOURCE_TYPE, saved.getPaymentId(), PaymentRequestedEvent.TOPIC, toRequestedEvent(saved));
+        outboxService.enqueue(RESOURCE_TYPE, saved.getPaymentId(), PaymentRequestedEvent.TOPIC, toRequestedEvent(saved, cardToken));
         log.info("Payment created. paymentId={}, merchantId={}, amount={}, installment={}",
                 saved.getPaymentId(), saved.getMerchantId(), saved.getMoney(), saved.getInstallmentCount());
 
         return paymentMapper.toDto(saved);
     }
 
-    private PaymentRequestedEvent toRequestedEvent(Payment payment) {
+    private PaymentRequestedEvent toRequestedEvent(Payment payment, String cardToken) {
         return new PaymentRequestedEvent(
                 payment.getPaymentId(),
                 payment.getMerchantId(),
@@ -187,6 +249,7 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.getTerminalType(),
                 payment.getCardBin(),
                 payment.getCardLast4(),
+                cardToken,
                 payment.getAmount(),
                 payment.getCurrency(),
                 payment.getInstallmentCount(),

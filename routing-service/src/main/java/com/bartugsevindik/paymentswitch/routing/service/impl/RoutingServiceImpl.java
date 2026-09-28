@@ -135,6 +135,7 @@ public class RoutingServiceImpl implements RoutingService {
                 result.onUs(),
                 payment.cardBin(),
                 payment.cardLast4(),
+                payment.cardToken(),
                 payment.amount(),
                 payment.currency(),
                 payment.installmentCount(),

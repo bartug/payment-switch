@@ -42,7 +42,7 @@ public class AcquirerBankServiceImpl implements AcquirerBankService {
 
     /**
      * <h1>Aktif Bankaları Getirme</h1>
-     * <p>Şu an işlem alabilen bankaları döndürür. Kısa süreli cache'lenir.</p>
+     * <p>Şu an işlem alabilen (aktif ve sağlıklı) bankaları döndürür. Kısa süreli cache'lenir.</p>
      *
      * @return Aktif bankalar
      * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
@@ -50,7 +50,7 @@ public class AcquirerBankServiceImpl implements AcquirerBankService {
      */
     @Override
     public List<AcquirerBankInfo> getActiveBanks() {
-        return cache.get(ALL).stream().filter(AcquirerBankInfo::active).toList();
+        return cache.get(ALL).stream().filter(AcquirerBankInfo::canReceive).toList();
     }
 
     /**
@@ -81,15 +81,44 @@ public class AcquirerBankServiceImpl implements AcquirerBankService {
         AcquirerBank bank = acquirerBankRepository.findByBankCode(bankCode)
                 .orElseThrow(() -> new NotFoundException("Banka", "bankCode", bankCode));
         bank.setActive(active);
-        // Commit'ten önce silinirse başka bir thread eski değeri tekrar cache'e yükleyebilir
+        invalidateAfterCommit();
+        log.warn("Acquirer bank status changed. bankCode={}, active={}", bankCode, active);
+        return toInfo(bank);
+    }
+
+    /**
+     * <h1>Banka Sağlık Durumu Güncelleme</h1>
+     * <p>bank-adapter'dan gelen circuit breaker durumuna göre bankayı otomatik olarak işlem almaz duruma getirir
+     * ya da geri açar. Operasyonun verdiği aktif/pasif kararına dokunmaz.</p>
+     *
+     * @param bankCode Banka kodu
+     * @param healthy  Circuit breaker kapalı mı
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 28.09.2026 - PS-5
+     */
+    @Override
+    @Transactional
+    public void updateBankHealth(@NotNull BankCode bankCode, boolean healthy) {
+        acquirerBankRepository.findByBankCode(bankCode).ifPresent(bank -> {
+            // Periyodik durum bildirimlerinde değişiklik yoksa yazma
+            if (!Boolean.valueOf(healthy).equals(bank.getHealthy())) {
+                bank.setHealthy(healthy);
+                invalidateAfterCommit();
+                log.warn("Acquirer bank health changed. bankCode={}, healthy={}", bankCode, healthy);
+            }
+        });
+    }
+
+    /**
+     * Commit'ten önce silinirse başka bir thread eski değeri tekrar cache'e yükleyebilir.
+     */
+    private void invalidateAfterCommit() {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 cache.invalidateAll();
             }
         });
-        log.warn("Acquirer bank status changed. bankCode={}, active={}", bankCode, active);
-        return toInfo(bank);
     }
 
     private List<AcquirerBankInfo> loadAll() {
@@ -101,6 +130,6 @@ public class AcquirerBankServiceImpl implements AcquirerBankService {
 
     private static AcquirerBankInfo toInfo(AcquirerBank bank) {
         return new AcquirerBankInfo(bank.getBankCode(), Boolean.TRUE.equals(bank.getActive()),
-                bank.getOnUsRateBps(), bank.getOffUsRateBps());
+                Boolean.TRUE.equals(bank.getHealthy()), bank.getOnUsRateBps(), bank.getOffUsRateBps());
     }
 }

@@ -7,6 +7,55 @@ spring:
   threads:
     virtual:
       enabled: true
+  datasource:
+    url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DB:payment_switch}
+    username: ${PG_USERNAME:payment}
+    password: ${PG_PASSWORD:payment}
+    hikari:
+      maximum-pool-size: ${PG_POOL_SIZE:20}
+      connection-timeout: 3000
+      schema: bank_adapter
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: bank_adapter
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    schemas: bank_adapter
+    default-schema: bank_adapter
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        enable.auto.commit: false
+        # Banka çağrısı birkaç saniye sürebilir; tek poll'daki mesaj sayısı düşük tutulur ki
+        # max.poll.interval aşılıp gereksiz rebalance olmasın
+        max.poll.records: 10
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
+        delivery.timeout.ms: 5000
+        request.timeout.ms: 3000
+        max.block.ms: 3000
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
 
 management:
   endpoints:
@@ -17,3 +66,64 @@ management:
     health:
       probes:
         enabled: true
+
+logging:
+  level:
+    com.bartugsevindik.paymentswitch: ${LOG_LEVEL:INFO}
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
+
+application:
+  outbox:
+    poll-interval: ${OUTBOX_POLL_INTERVAL:200ms}
+  kafka:
+    topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
+    topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  bank-adapter:
+    # Production'da her banka ayrı deployment: BANK_CODES=YKB. Lokalde hepsi tek süreçte, her banka ayrı listener ile.
+    banks: ${BANK_CODES:QNB,YKB,GARANTI,ISBANK,AKBANK}
+    consumer-concurrency: ${BANK_CONSUMER_CONCURRENCY:2}
+    bank-api-url: ${BANK_API_URL:http://localhost:8090}
+    payment-api-url: ${PAYMENT_API_URL:http://localhost:8081}
+    internal-api-token: ${INTERNAL_API_TOKEN:c4024988bb072df540b4ca243ab541f64f37b26e191da507}
+    connect-timeout: 1s
+    # Bu süre dolarsa işlem UNKNOWN olur; banka parayı çekmiş olabilir
+    read-timeout: ${BANK_READ_TIMEOUT:5s}
+    recovery:
+      stuck-after: 30s
+      inquiry-initial-delay: 2s
+      inquiry-backoff: 2s
+      max-inquiry-attempts: 5
+      max-reversal-attempts: 10
+    circuit-breaker:
+      failure-rate-threshold: 50
+      minimum-number-of-calls: 5
+      sliding-window-size: 10
+      wait-duration-in-open-state: 10s
+      permitted-calls-in-half-open-state: 3
+    bulkhead:
+      max-concurrent-calls: 20
+      max-wait: 1s
+    health:
+      probe-interval: 5s
+      publish-interval: 30s
+
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+
+application:
+  bank-adapter:
+    internal-api-token: ${INTERNAL_API_TOKEN}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  structured:
+    format:
+      console: ecs

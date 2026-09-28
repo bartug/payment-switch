@@ -43,6 +43,13 @@ public class AcquirerBank extends BaseEntity {
     private Boolean active;
 
     /**
+     * bank-adapter'daki circuit breaker durumundan otomatik gelir. {@code active} operasyonun elle verdiği karardır;
+     * işlem gönderilmesi için ikisinin de {@code true} olması gerekir.
+     */
+    @Column(name = "healthy", nullable = false)
+    private Boolean healthy;
+
+    /**
      * Kart bu bankanınsa uygulanan komisyon (baz puan, 180 = %1,80).
      */
     @Column(name = "on_us_rate_bps", nullable = false)

@@ -15,6 +15,8 @@ import java.util.Set;
  * tanımlı olmayan bir geçiş denenirse entity exception fırlatır.</p>
  * <p>{@code UNKNOWN}: bankaya gidildi ama cevap alınamadı. Para çekilmiş olabilir, bu yüzden retry edilmez;
  * inquiry veya reversal ile netleştirilir.</p>
+ * <p>Routing sonucu ile banka sonucu farklı topic'lerden gelir ve aralarında sıra garantisi yoktur. Banka sonucu
+ * önce gelebileceği için {@code PENDING} durumundan doğrudan banka sonucuna geçilebilir.</p>
  *
  * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
  * @since 28.09.2026 - PS-1
@@ -22,7 +24,6 @@ import java.util.Set;
 public enum PaymentStatus {
     PENDING,
     ROUTED,
-    SENT_TO_BANK,
     APPROVED,
     DECLINED,
     UNKNOWN,
@@ -32,9 +33,8 @@ public enum PaymentStatus {
     FAILED;
 
     private static final Map<PaymentStatus, Set<PaymentStatus>> TRANSITIONS = Map.of(
-            PENDING, EnumSet.of(ROUTED, FAILED),
-            ROUTED, EnumSet.of(SENT_TO_BANK, FAILED),
-            SENT_TO_BANK, EnumSet.of(APPROVED, DECLINED, UNKNOWN),
+            PENDING, EnumSet.of(ROUTED, FAILED, APPROVED, DECLINED, UNKNOWN),
+            ROUTED, EnumSet.of(APPROVED, DECLINED, UNKNOWN, FAILED),
             UNKNOWN, EnumSet.of(APPROVED, DECLINED, REVERSED),
             APPROVED, EnumSet.of(VOIDED, REFUNDED)
     );

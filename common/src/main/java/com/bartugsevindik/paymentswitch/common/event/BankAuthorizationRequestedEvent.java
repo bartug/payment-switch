@@ -15,7 +15,8 @@ import java.time.Instant;
  * <p>routing-service tarafından seçilen bankanın topic'ine ({@code bank.requests.{BANK}}) basılır,
  * o bankanın adapter'ı tarafından tüketilir.</p>
  *
- * @param onUs Kart ile POS aynı bankaya mı ait. On-us işlem BKM'ye gitmez, komisyonu düşüktür.
+ * @param onUs      Kart ile POS aynı bankaya mı ait. On-us işlem BKM'ye gitmez, komisyonu düşüktür.
+ * @param cardToken Card vault anahtarı. Adapter kart verisini bankaya göndermeden hemen önce bununla çözdürür.
  * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
  * @since 28.09.2026 - PS-4
  */
@@ -28,6 +29,7 @@ public record BankAuthorizationRequestedEvent(
         boolean onUs,
         String cardBin,
         String cardLast4,
+        String cardToken,
         long amount,
         String currency,
         int installmentCount,

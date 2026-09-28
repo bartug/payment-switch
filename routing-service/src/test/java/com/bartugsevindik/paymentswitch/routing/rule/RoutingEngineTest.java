@@ -24,11 +24,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class RoutingEngineTest {
 
-    private static final AcquirerBankInfo QNB = new AcquirerBankInfo(BankCode.QNB, true, 170, 199);
-    private static final AcquirerBankInfo YKB = new AcquirerBankInfo(BankCode.YKB, true, 180, 220);
-    private static final AcquirerBankInfo GARANTI = new AcquirerBankInfo(BankCode.GARANTI, true, 175, 215);
-    private static final AcquirerBankInfo ISBANK = new AcquirerBankInfo(BankCode.ISBANK, true, 185, 225);
-    private static final AcquirerBankInfo AKBANK = new AcquirerBankInfo(BankCode.AKBANK, true, 190, 230);
+    private static final AcquirerBankInfo QNB = new AcquirerBankInfo(BankCode.QNB, true, true, 170, 199);
+    private static final AcquirerBankInfo YKB = new AcquirerBankInfo(BankCode.YKB, true, true, 180, 220);
+    private static final AcquirerBankInfo GARANTI = new AcquirerBankInfo(BankCode.GARANTI, true, true, 175, 215);
+    private static final AcquirerBankInfo ISBANK = new AcquirerBankInfo(BankCode.ISBANK, true, true, 185, 225);
+    private static final AcquirerBankInfo AKBANK = new AcquirerBankInfo(BankCode.AKBANK, true, true, 190, 230);
     private static final List<AcquirerBankInfo> ALL_BANKS = List.of(QNB, YKB, GARANTI, ISBANK, AKBANK);
 
     private static final BinInfo WORLD_CREDIT = bin(BankCode.YKB, CardProgram.WORLD, CardType.CREDIT);
@@ -129,7 +129,7 @@ class RoutingEngineTest {
 
     @Test
     void esitKomisyondaOnUsBankaTercihEdilir() {
-        AcquirerBankInfo cheapOffUs = new AcquirerBankInfo(BankCode.QNB, true, 150, 180);
+        AcquirerBankInfo cheapOffUs = new AcquirerBankInfo(BankCode.QNB, true, true, 150, 180);
 
         RoutingResult result = engine.decide(context(1, WORLD_CREDIT, List.of(cheapOffUs, YKB)));
 

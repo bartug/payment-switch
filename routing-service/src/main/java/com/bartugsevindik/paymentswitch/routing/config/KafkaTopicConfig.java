@@ -6,6 +6,7 @@
 package com.bartugsevindik.paymentswitch.routing.config;
 
 import com.bartugsevindik.paymentswitch.common.enums.BankCode;
+import com.bartugsevindik.paymentswitch.common.event.BankHealthChangedEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRequestedEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRoutingResultEvent;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -36,6 +37,7 @@ public class KafkaTopicConfig {
         topics.add(TopicBuilder.name(PaymentRequestedEvent.TOPIC).partitions(partitions).replicas(replicas).build());
         topics.add(TopicBuilder.name(PaymentRoutingResultEvent.TOPIC).partitions(partitions).replicas(replicas).build());
         topics.add(TopicBuilder.name(PaymentRequestedEvent.TOPIC + ".DLT").partitions(partitions).replicas(replicas).build());
+        topics.add(TopicBuilder.name(BankHealthChangedEvent.TOPIC).partitions(1).replicas(replicas).build());
         return new KafkaAdmin.NewTopics(topics.toArray(NewTopic[]::new));
     }
 }

@@ -21,7 +21,6 @@ class PaymentStatusTest {
         Payment payment = new Payment();
         payment.changeStatus(PaymentStatus.PENDING);
         payment.changeStatus(PaymentStatus.ROUTED);
-        payment.changeStatus(PaymentStatus.SENT_TO_BANK);
         payment.changeStatus(PaymentStatus.APPROVED);
 
         assertThat(payment.getPaymentStatus()).isEqualTo(PaymentStatus.APPROVED);
@@ -29,7 +28,7 @@ class PaymentStatusTest {
 
     @Test
     void cevapsizIslemReversalIleKapanir() {
-        assertThat(PaymentStatus.SENT_TO_BANK.canTransitionTo(PaymentStatus.UNKNOWN)).isTrue();
+        assertThat(PaymentStatus.ROUTED.canTransitionTo(PaymentStatus.UNKNOWN)).isTrue();
         assertThat(PaymentStatus.UNKNOWN.canTransitionTo(PaymentStatus.REVERSED)).isTrue();
     }
 
@@ -38,11 +37,21 @@ class PaymentStatusTest {
         Payment payment = new Payment();
         payment.changeStatus(PaymentStatus.PENDING);
         payment.changeStatus(PaymentStatus.ROUTED);
-        payment.changeStatus(PaymentStatus.SENT_TO_BANK);
         payment.changeStatus(PaymentStatus.DECLINED);
 
         assertThatThrownBy(() -> payment.changeStatus(PaymentStatus.APPROVED))
                 .isInstanceOf(InvalidPaymentStateException.class);
+    }
+
+    @Test
+    void bankaSonucuRoutingSonucundanOnceGelebilir() {
+        assertThat(PaymentStatus.PENDING.canTransitionTo(PaymentStatus.APPROVED)).isTrue();
+    }
+
+    @Test
+    void cevapsizIslemBasarisizaDusemez() {
+        // UNKNOWN'da para çekilmiş olabilir; ya onaylanır ya reversal ile geri alınır
+        assertThat(PaymentStatus.UNKNOWN.canTransitionTo(PaymentStatus.FAILED)).isFalse();
     }
 
     @Test

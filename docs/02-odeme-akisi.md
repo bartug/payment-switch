@@ -72,6 +72,7 @@ sequenceDiagram
 ```
 
 Timeout olan satış isteği **asla retry edilmez**. Banka parayı çekmiş olabilir. Retry, çift çekim demektir.
+Detaylı akış ve gerçek ortamda denenen senaryolar: [05-banka-entegrasyonu.md](05-banka-entegrasyonu.md)
 
 ## 4. Payment state machine
 
@@ -79,13 +80,15 @@ Timeout olan satış isteği **asla retry edilmez**. Banka parayı çekmiş olab
 stateDiagram-v2
     [*] --> PENDING
     PENDING --> ROUTED
-    PENDING --> FAILED: routing bulunamadı
-    ROUTED --> SENT_TO_BANK
-    SENT_TO_BANK --> APPROVED
-    SENT_TO_BANK --> DECLINED
-    SENT_TO_BANK --> UNKNOWN: timeout
-    UNKNOWN --> APPROVED: inquiry
-    UNKNOWN --> REVERSED: reversal
+    PENDING --> FAILED: routing reddetti
+    PENDING --> APPROVED: banka sonucu routing sonucundan önce geldi
+    ROUTED --> APPROVED
+    ROUTED --> DECLINED
+    ROUTED --> UNKNOWN: timeout / 5xx
+    ROUTED --> FAILED: bankaya gönderilemedi (circuit açık)
+    UNKNOWN --> APPROVED: inquiry onay buldu
+    UNKNOWN --> DECLINED: inquiry red buldu
+    UNKNOWN --> REVERSED: işlem bulunamadı → reversal
     APPROVED --> VOIDED: gün sonu öncesi iptal
     APPROVED --> REFUNDED: iade
     DECLINED --> [*]

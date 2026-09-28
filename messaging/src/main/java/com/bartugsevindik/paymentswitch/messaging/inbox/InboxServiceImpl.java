@@ -38,4 +38,21 @@ public class InboxServiceImpl implements InboxService {
         }
         return first;
     }
+
+    /**
+     * <h1>İşlenmiş mi Kontrolü</h1>
+     * <p>Kilit almadan bakar; pahalı bir işe (dış servis çağrısı) girmeden önce tekrarı elemek için kullanılır.
+     * Asıl garanti yine {@link #markProcessed(String, String)}'tir.</p>
+     *
+     * @param eventId  Event ID
+     * @param consumer Consumer adı
+     * @return Daha önce işlendiyse {@code true}
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 28.09.2026 - PS-5
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isProcessed(@NotNull String eventId, @NotNull String consumer) {
+        return processedEventRepository.existsByEventIdAndConsumer(eventId, consumer);
+    }
 }

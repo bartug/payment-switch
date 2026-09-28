@@ -32,6 +32,8 @@ docker compose ps
 ./mvnw install -DskipTests
 ./mvnw -pl payment-api spring-boot:run       # 8081
 ./mvnw -pl routing-service spring-boot:run   # 8082
+./mvnw -pl bank-adapter spring-boot:run      # 8083
+./mvnw -pl bank-simulator spring-boot:run    # 8090
 ```
 
 Flyway migration'ları uygulama açılırken otomatik çalışır.
@@ -86,6 +88,12 @@ hangi bankaya gittiğini gösterir. Test kartları ve routing senaryoları: [doc
 | `TERMINAL_TIMESTAMP_TOLERANCE` | `5m` | Terminal saati ile sunucu saati arasındaki izin verilen fark |
 | `OUTBOX_POLL_INTERVAL` | `200ms` | Outbox relay'in Kafka'ya gönderim aralığı |
 | `KAFKA_TOPIC_PARTITIONS` / `KAFKA_TOPIC_REPLICAS` | `6` / `1` | Uygulamanın açılışta oluşturduğu topic'ler için. Production'da replicas en az 3 olmalı. |
+| `CARD_VAULT_ENCRYPTION_KEY` | lokal için sabit bir key | Kart verisini şifreleyen AES-256 key. Terminal key'inden **farklı** olmalı. **Production'da zorunlu.** |
+| `CARD_VAULT_TTL` | `15m` | Bankaya ulaşamayan ödemelerin kart verisinin en fazla saklanma süresi |
+| `INTERNAL_API_TOKEN` | lokal için sabit bir token | payment-api `/internal/**` ile bank-adapter arasında ortak. **Production'da zorunlu**, mTLS ile değiştirilmeli. |
+| `BANK_CODES` | `QNB,YKB,GARANTI,ISBANK,AKBANK` | bank-adapter'ın işlem gönderdiği bankalar. Production'da banka başına deployment: `BANK_CODES=YKB` |
+| `BANK_API_URL` / `PAYMENT_API_URL` | `http://localhost:8090` / `http://localhost:8081` | |
+| `BANK_READ_TIMEOUT` | `5s` | Bu süre dolarsa işlem `UNKNOWN` olur |
 | `ROUTING_CONSUMER_CONCURRENCY` | `3` | routing-service consumer thread sayısı. Partition sayısından fazlası boşta kalır. |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
 
@@ -124,6 +132,30 @@ docker exec ps-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server
   --topic payment.requested.DLT --from-beginning --property print.key=true --property print.headers=true
 ```
 
+### Banka entegrasyonu
+
+| Metrik | Anlamı | Alarm önerisi |
+|---|---|---|
+| `resilience4j_circuitbreaker_state{name="YKB"}` | Circuit durumu | OPEN olduğunda |
+| `bank_transactions_total{bank,status}` | Banka ve durum bazında işlem sayısı | UNKNOWN oranı artıyorsa banka yavaşlıyor |
+| `bank_transactions_manual_review_total` | Reversal da başarısız olan işlemler | **> 0 ise hemen incele**, mutabakatta kontrol et |
+| `resilience4j_bulkhead_available_concurrent_calls` | Bankaya giden eş zamanlı çağrı kapasitesi | 0'a yaklaşıyorsa |
+
+```bash
+curl -s localhost:8083/v1/admin/circuits
+curl -s localhost:8083/v1/admin/transactions/<paymentId>
+
+# Chaos: cevap geciksin / banka kapansın / normale dönsün
+curl -s -X PUT localhost:8090/v1/admin/banks/YKB/chaos -H 'Content-Type: application/json' \
+  -d '{"down":false,"latencyMs":0,"failureRate":0,"lateResponseRate":1,"lateResponseMs":8000}'
+curl -s -X PUT localhost:8090/v1/admin/banks/YKB/chaos -H 'Content-Type: application/json' \
+  -d '{"down":true,"latencyMs":0,"failureRate":0,"lateResponseRate":0,"lateResponseMs":0}'
+curl -s -X PUT localhost:8090/v1/admin/banks/YKB/chaos -H 'Content-Type: application/json' \
+  -d '{"down":false,"latencyMs":0,"failureRate":0,"lateResponseRate":0,"lateResponseMs":0}'
+```
+
+Senaryolar ve beklenen sonuçlar: [docs/05-banka-entegrasyonu.md](docs/05-banka-entegrasyonu.md)
+
 ### Routing
 
 | Metrik | Anlamı |
@@ -145,7 +177,9 @@ curl -s -X PUT localhost:8082/v1/admin/banks/YKB/active
 - İmajlar multi-stage build ile alınır. Katmanlar (dependencies / application) ayrı olduğu için kod değişikliğinde sadece son katman değişir.
 - Container non-root kullanıcı (`psadmin`) ile çalışır.
 - Kubernetes'te readiness probe olarak `/actuator/health/readiness` kullanılmalı.
-- `bank-adapter` her banka için ayrı deployment olarak çıkılır (`BANK_CODE=YKB` vb.) ve ölçeklemesi banka bazında yapılır. Detaylar PS-5 ile gelecek.
+- `bank-adapter` her banka için ayrı deployment olarak çıkılır (`BANK_CODES=YKB`) ve ölçeklemesi banka bazında yapılır.
+  Yoğun bankanın pod sayısı artırılırken topic partition sayısı da en az pod × `BANK_CONSUMER_CONCURRENCY` olmalıdır.
+- `/internal/**` uç noktaları ingress'e açılmamalıdır; sadece cluster içinden erişilmelidir.
 
 ## 🧹 Temizlik
 

@@ -12,7 +12,8 @@ import java.time.Instant;
 /**
  * <h1>PaymentRequestedEvent</h1>
  * <p>payment-api tarafından {@code payment.requested} topic'ine basılır, routing-service tarafından tüketilir.</p>
- * <p>Kart numarasının tamamı event'e konmaz. Routing için BIN yeterlidir.</p>
+ * <p>Kart numarasının tamamı event'e konmaz. Routing için BIN yeterlidir; bankaya gidecek kart verisi
+ * {@code cardToken} ile card vault'tan alınır.</p>
  *
  * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
  * @since 28.09.2026 - PS-1
@@ -24,6 +25,7 @@ public record PaymentRequestedEvent(
         TerminalType terminalType,
         String cardBin,
         String cardLast4,
+        String cardToken,
         long amount,
         String currency,
         int installmentCount,

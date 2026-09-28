@@ -92,6 +92,11 @@ application:
   kafka:
     topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  card-vault:
+    ttl: ${CARD_VAULT_TTL:15m}
+    # Sadece lokal geliştirme için. Terminal master key'den farklı olmalı.
+    encryption-key: ${CARD_VAULT_ENCRYPTION_KEY:XDMfnefDxUXZULppVyk4UfN+FbQa0qImaU8Ji6Cm4gA=}
+    internal-api-token: ${INTERNAL_API_TOKEN:c4024988bb072df540b4ca243ab541f64f37b26e191da507}
   terminal-auth:
     timestamp-tolerance: ${TERMINAL_TIMESTAMP_TOLERANCE:5m}
     # Sadece lokal geliştirme için. openssl rand -base64 32 ile üretildi.
@@ -109,6 +114,9 @@ application:
     hash-secret: ${IDEMPOTENCY_HASH_SECRET}
   terminal-auth:
     secret-master-key: ${TERMINAL_SECRET_MASTER_KEY}
+  card-vault:
+    encryption-key: ${CARD_VAULT_ENCRYPTION_KEY}
+    internal-api-token: ${INTERNAL_API_TOKEN}
 
 springdoc:
   api-docs:

@@ -23,7 +23,7 @@ public interface AcquirerBankService {
 
     /**
      * <h1>Aktif Bankaları Getirme</h1>
-     * <p>Şu an işlem alabilen bankaları döndürür. Kısa süreli cache'lenir.</p>
+     * <p>Şu an işlem alabilen (aktif ve sağlıklı) bankaları döndürür. Kısa süreli cache'lenir.</p>
      *
      * @return Aktif bankalar
      * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
@@ -51,4 +51,16 @@ public interface AcquirerBankService {
      * @since 28.09.2026 - PS-4
      */
     AcquirerBankInfo updateBankStatus(BankCode bankCode, boolean active);
+
+    /**
+     * <h1>Banka Sağlık Durumu Güncelleme</h1>
+     * <p>bank-adapter'dan gelen circuit breaker durumuna göre bankayı otomatik olarak işlem almaz duruma getirir
+     * ya da geri açar. Operasyonun verdiği aktif/pasif kararına dokunmaz.</p>
+     *
+     * @param bankCode Banka kodu
+     * @param healthy  Circuit breaker kapalı mı
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 28.09.2026 - PS-5
+     */
+    void updateBankHealth(BankCode bankCode, boolean healthy);
 }

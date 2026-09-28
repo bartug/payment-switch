@@ -134,6 +134,46 @@ services:
     networks:
       - app-network
 
+  bank-simulator:
+    build:
+      context: .
+      dockerfile: bank-simulator/Dockerfile
+    container_name: ps-bank-simulator
+    profiles: [ "app" ]
+    ports:
+      - "8090:8090"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+IgnoreUnrecognizedVMOptions -XX:UseSVE=0"
+      TZ: ${TZ:-Europe/Istanbul}
+    networks:
+      - app-network
+
+  bank-adapter:
+    build:
+      context: .
+      dockerfile: bank-adapter/Dockerfile
+    container_name: ps-bank-adapter
+    profiles: [ "app" ]
+    ports:
+      - "8083:8083"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+IgnoreUnrecognizedVMOptions -XX:UseSVE=0"
+      PG_HOST: postgres
+      PG_DB: ${PG_DB:-payment_switch}
+      PG_USERNAME: ${PG_USERNAME:-payment}
+      PG_PASSWORD: ${PG_PASSWORD:-payment}
+      KAFKA_BROKERS: kafka:29092
+      BANK_API_URL: http://bank-simulator:8090
+      PAYMENT_API_URL: http://payment-api:8081
+      TZ: ${TZ:-Europe/Istanbul}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
 
