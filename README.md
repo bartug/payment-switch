@@ -1,0 +1,107 @@
+# Payment Switch
+
+POS terminallerinden (fiziki veya sanal) gelen kart ödemelerini karşılayan, kartın BIN'ine göre doğru bankaya yönlendiren
+ve banka cevabını üye işyerine ulaştıran ödeme switch'i.
+
+Param ve MoneyPay entegrasyonlarında ödemeyi sağlayıcının API'sine gönderen taraftaydım. Bu projede o API'nin arkasındaki
+kısmı yazıyorum: idempotency, asenkron dağıtım, banka bazlı izolasyon, timeout ve reversal yönetimi, mutabakat.
+
+```
+POS ──► payment-api ──► Kafka ──► routing-service ──► bank.requests.{BANKA} ──► bank-adapter ──► Banka
+             ▲                                                                        │
+             └──────────────────────── payment.results ◄──────────────────────────────┘
+```
+
+Detaylı akış: [docs/02-odeme-akisi.md](docs/02-odeme-akisi.md) · Domain sözlüğü: [docs/01-domain-sozlugu.md](docs/01-domain-sozlugu.md) ·
+Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
+
+## 1. Geliştirme Ortamı
+
+- Java 21, Maven 3.9 (wrapper projede mevcut)
+- Docker (Postgres, Kafka, Redis ve testlerdeki Testcontainers için)
+- IntelliJ IDEA + EnvFile eklentisi. `.env-template` dosyasını `.env` olarak kopyalayıp doldurun.
+
+```bash
+docker compose up -d
+./mvnw clean verify
+./mvnw -pl payment-api spring-boot:run
+```
+
+Swagger: http://localhost:8081/swagger-ui.html
+
+## 2. Modüller
+
+| Modül | Port | Sorumluluk |
+|---|---|---|
+| `common` | - | Ortak response yapısı, exception'lar, `Money`, event'ler |
+| `payment-api` | 8081 | Ödeme karşılama, idempotency, durum yönetimi |
+| `routing-service` | 8082 | BIN çözümleme ve banka seçimi |
+| `bank-adapter` | 8083 | Banka protokol dönüşümü, timeout, reversal |
+| `bank-simulator` | 8090 | Sahte banka API'leri ve hata senaryoları |
+
+## 3. Yol Haritası
+
+| Faz | Konu | Durum |
+|---|---|---|
+| PS-0 | Domain sözlüğü, akış diyagramları, ADR-001 | ✅ |
+| PS-1 | Multi-module iskelet, `Money`, Payment state machine | ✅ |
+| PS-2 | Idempotency-Key, terminal HMAC imzası | ⏳ |
+| PS-3 | Transactional outbox, Kafka | |
+| PS-4 | BIN tabanlı routing, kural zinciri | |
+| PS-5 | Bank adapter, resilience, inquiry ve reversal | |
+| PS-6 | Sonuç işleme, webhook, void ve refund | |
+| PS-7 | Double-entry ledger, mutabakat | |
+| PS-8 | Ölçekleme, OpenTelemetry, Gatling | |
+
+## 4. Kod Kalitesi
+
+- Para her zaman `Money` ile ve en küçük birim (kuruş) cinsinden `long` olarak taşınır. `double` ve `float` kullanılmaz.
+- Kart numarası ve CVV **saklanmaz, loglanmaz**. Sadece BIN ve son 4 hane tutulur.
+- Ödeme durumu sadece `Payment.changeStatus` üzerinden değişir.
+- Her faz kendi branch'inde geliştirilir, testler yeşil olmadan main'e alınmaz.
+
+## 5. Dokümantasyon Kuralları
+
+### 5.1. Copyright Ayarları
+
+`Settings > Editor > Copyright > Copyright Profiles`
+
+#### Örnek Template
+
+```
+Copyright (c) $today.year. Bartuğ Sevindik <bartugsevindik@gmail.com>
+```
+
+### 5.2. Intellij Javadoc Templates
+
+#### Method
+
+```
+/**
+ * <h1>$title$</h1>
+ * <p>$description$</p>
+ *
+ * @param
+ * @return
+ * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+ * @since ${DATE} - PS-
+ */
+```
+
+#### Class
+
+```
+/**
+ * <h1>${NAME}</h1>
+ * <p></p>
+ *
+ * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+ * @since ${DATE} - PS-
+ */
+```
+
+## 6. Genel Kod Yapısı
+
+Her servis kendi domain paketine sahiptir (`com.bartugsevindik.paymentswitch.<modül>`). Paket içi katmanlar
+`controller`, `service`, `service/impl`, `repository`, `entity`, `dto`, `mapper`, `config` ve `enums` şeklindedir.
+Servisler arası paylaşılan her şey `common` modülündedir. DB şeması Flyway ile yönetilir (`ddl-auto: validate`).

@@ -1,0 +1,19 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: routing-service
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

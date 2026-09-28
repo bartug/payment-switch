@@ -1,0 +1,9 @@
+.git/
+.idea
+**/target
+.env
+.env-template
+compose.yaml
+.gitignore
+docs
+*.md

@@ -1,0 +1,113 @@
+services:
+  # PostgreSQL (payment, outbox, idempotency, BIN tabloları)
+  postgres:
+    image: postgres:16-alpine
+    container_name: ps-postgres
+    environment:
+      POSTGRES_DB: ${PG_DB:-payment_switch}
+      POSTGRES_USER: ${PG_USERNAME:-payment}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-payment}
+      TZ: ${TZ:-Europe/Istanbul}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PG_USERNAME:-payment}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - app-network
+
+  # Redis (idempotency in-flight kilidi, BIN cache)
+  redis:
+    image: redis:7-alpine
+    container_name: ps-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - app-network
+
+  # Kafka (KRaft modu, Zookeeper gerekmiyor)
+  kafka:
+    image: apache/kafka:3.8.1
+    container_name: ps-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # Apple M4 işlemcilerde JDK 21 SVE nedeniyle SIGILL ile çöküyor
+      JAVA_TOOL_OPTIONS: "-XX:+IgnoreUnrecognizedVMOptions -XX:UseSVE=0"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Topic'ler kod ile açılacak, yanlış yazılmış topic isimleri sessizce oluşmasın
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_NUM_PARTITIONS: 6
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  # Kafka UI (topic, partition ve consumer lag takibi için)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ps-kafka-ui
+    ports:
+      - "8095:8080"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+IgnoreUnrecognizedVMOptions -XX:UseSVE=0"
+      KAFKA_CLUSTERS_0_NAME: payment-switch
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # Uygulama servisleri. Sadece "app" profili ile ayağa kalkar: docker compose --profile app up -d
+  payment-api:
+    build:
+      context: .
+      dockerfile: payment-api/Dockerfile
+    container_name: ps-payment-api
+    profiles: [ "app" ]
+    ports:
+      - "8081:8081"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+IgnoreUnrecognizedVMOptions -XX:UseSVE=0"
+      PG_HOST: postgres
+      PG_DB: ${PG_DB:-payment_switch}
+      PG_USERNAME: ${PG_USERNAME:-payment}
+      PG_PASSWORD: ${PG_PASSWORD:-payment}
+      KAFKA_BROKERS: kafka:29092
+      REDIS_HOST: redis
+      TZ: ${TZ:-Europe/Istanbul}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
