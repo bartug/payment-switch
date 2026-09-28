@@ -7,6 +7,9 @@ package com.bartugsevindik.paymentswitch.payment.service.impl;
 
 import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRequestedEvent;
+import com.bartugsevindik.paymentswitch.common.event.PaymentRoutingResultEvent;
+import com.bartugsevindik.paymentswitch.messaging.consumer.IncomingEvent;
+import com.bartugsevindik.paymentswitch.messaging.inbox.InboxService;
 import com.bartugsevindik.paymentswitch.common.exception.BadRequestException;
 import com.bartugsevindik.paymentswitch.common.exception.NotFoundException;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentCreateRequest;
@@ -20,7 +23,7 @@ import com.bartugsevindik.paymentswitch.payment.idempotency.lock.IdempotencyLock
 import com.bartugsevindik.paymentswitch.payment.idempotency.lock.LockResult;
 import com.bartugsevindik.paymentswitch.payment.idempotency.service.IdempotencyService;
 import com.bartugsevindik.paymentswitch.payment.mapper.PaymentMapper;
-import com.bartugsevindik.paymentswitch.payment.outbox.service.OutboxService;
+import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxService;
 import com.bartugsevindik.paymentswitch.payment.repository.PaymentRepository;
 import com.bartugsevindik.paymentswitch.payment.service.PaymentService;
 import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalPrincipal;
@@ -42,12 +45,14 @@ import java.util.UUID;
 public class PaymentServiceImpl implements PaymentService {
 
     private static final String RESOURCE_TYPE = "PAYMENT";
+    private static final String CONSUMER = "payment-api";
 
     private final PaymentRepository paymentRepository;
     private final PaymentMapper paymentMapper;
     private final IdempotencyService idempotencyService;
     private final IdempotencyLock idempotencyLock;
     private final OutboxService outboxService;
+    private final InboxService inboxService;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -117,6 +122,43 @@ public class PaymentServiceImpl implements PaymentService {
         return paymentRepository.findByPaymentIdAndMerchantId(paymentId, terminal.merchantId())
                 .map(paymentMapper::toDto)
                 .orElseThrow(() -> new NotFoundException("Ödeme", "paymentId", paymentId));
+    }
+
+    /**
+     * <h1>Routing Sonucunu İşleme</h1>
+     * <p>routing-service'in kararına göre ödemeyi {@code ROUTED} ya da {@code FAILED} durumuna çeker.
+     * Aynı event ikinci kez gelirse hiçbir şey yapılmaz.</p>
+     *
+     * @param event {@code payment.routing.results} topic'inden gelen event
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 28.09.2026 - PS-4
+     */
+    @Override
+    @Transactional
+    public void applyRoutingResult(@NotNull IncomingEvent<PaymentRoutingResultEvent> event) {
+        PaymentRoutingResultEvent result = event.payload();
+        if (!inboxService.markProcessed(event.eventId(), CONSUMER)) {
+            return;
+        }
+
+        Payment payment = paymentRepository.findByPaymentId(result.paymentId())
+                .orElseThrow(() -> new NotFoundException("Ödeme", "paymentId", result.paymentId()));
+        // Banka cevabı routing sonucundan önce işlendiyse (farklı topic'ler arasında sıra garantisi yok) geri alınmaz
+        if (payment.getPaymentStatus() != PaymentStatus.PENDING) {
+            log.warn("Routing result ignored, payment already moved on. paymentId={}, status={}",
+                    payment.getPaymentId(), payment.getPaymentStatus());
+            return;
+        }
+
+        if (result.routed()) {
+            payment.setBankCode(result.bankCode());
+            payment.changeStatus(PaymentStatus.ROUTED);
+        } else {
+            payment.setFailureReason(result.description());
+            payment.changeStatus(PaymentStatus.FAILED);
+        }
+        log.info("Routing result applied. paymentId={}, status={}, bank={}, reason={}",
+                payment.getPaymentId(), payment.getPaymentStatus(), result.bankCode(), result.reason());
     }
 
     private PaymentDTO persistPayment(TerminalPrincipal terminal, IdempotencyContext context, PaymentCreateRequest request) {

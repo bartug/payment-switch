@@ -5,8 +5,8 @@
 
 package com.bartugsevindik.paymentswitch.payment.outbox;
 
-import com.bartugsevindik.paymentswitch.payment.outbox.entity.OutboxEvent;
-import com.bartugsevindik.paymentswitch.payment.outbox.repository.OutboxEventRepository;
+import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxEvent;
+import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxEventRepository;
 import com.bartugsevindik.paymentswitch.payment.support.AbstractIntegrationTest;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.errors.TimeoutException;

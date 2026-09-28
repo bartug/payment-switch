@@ -6,9 +6,9 @@
 package com.bartugsevindik.paymentswitch.payment.outbox;
 
 import com.bartugsevindik.paymentswitch.common.event.PaymentRequestedEvent;
-import com.bartugsevindik.paymentswitch.payment.outbox.entity.OutboxEvent;
-import com.bartugsevindik.paymentswitch.payment.outbox.relay.OutboxRelay;
-import com.bartugsevindik.paymentswitch.payment.outbox.repository.OutboxEventRepository;
+import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxEvent;
+import com.bartugsevindik.paymentswitch.messaging.MessageHeaders;
+import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxEventRepository;
 import com.bartugsevindik.paymentswitch.payment.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -51,8 +51,8 @@ class OutboxIntegrationTest extends AbstractIntegrationTest {
 
         ConsumerRecord<String, String> record = consumeByKey(paymentId);
         assertThat(record.key()).isEqualTo(paymentId);
-        assertThat(header(record, OutboxRelay.EVENT_TYPE_HEADER)).isEqualTo("PaymentRequestedEvent");
-        assertThat(header(record, OutboxRelay.EVENT_ID_HEADER))
+        assertThat(header(record, MessageHeaders.EVENT_TYPE)).isEqualTo("PaymentRequestedEvent");
+        assertThat(header(record, MessageHeaders.EVENT_ID))
                 .isEqualTo(outboxEventRepository.findFirstByAggregateIdOrderByIdDesc(paymentId).orElseThrow().getEventId());
 
         JsonNode payload = objectMapper.readTree(record.value());

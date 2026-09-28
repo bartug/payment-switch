@@ -29,8 +29,9 @@ docker compose ps
 ### Step 2: Uygulamayı lokalde çalıştırma
 
 ```bash
-./mvnw -pl payment-api -am install -DskipTests
-./mvnw -pl payment-api spring-boot:run
+./mvnw install -DskipTests
+./mvnw -pl payment-api spring-boot:run       # 8081
+./mvnw -pl routing-service spring-boot:run   # 8082
 ```
 
 Flyway migration'ları uygulama açılırken otomatik çalışır.
@@ -41,7 +42,7 @@ Flyway migration'ları uygulama açılırken otomatik çalışır.
 docker compose --profile app up -d --build
 ```
 
-Tek bir servisin imajını almak için build context **kök dizin** olmalı. `common` modülü her servise dahil ediliyor:
+Tek bir servisin imajını almak için build context **kök dizin** olmalı. `common` ve `messaging` modülleri servise dahil ediliyor:
 
 ```bash
 docker build -f payment-api/Dockerfile -t payment-switch/payment-api:1.0.0 .
@@ -65,6 +66,9 @@ scripts/pos-request.sh POST /v1/payments \
 
 İmza algoritması: [docs/03-terminal-kimlik-dogrulama.md](docs/03-terminal-kimlik-dogrulama.md)
 
+Birkaç saniye sonra `scripts/pos-request.sh GET /v1/payments/<paymentId>` ödemenin `ROUTED` durumuna geçtiğini ve
+hangi bankaya gittiğini gösterir. Test kartları ve routing senaryoları: [docs/04-routing.md](docs/04-routing.md)
+
 ## ⚙️ Ortam Değişkenleri
 
 `.env-template` dosyasındaki değişkenler kullanılır. Hepsinin lokal için varsayılan değeri var.
@@ -82,6 +86,7 @@ scripts/pos-request.sh POST /v1/payments \
 | `TERMINAL_TIMESTAMP_TOLERANCE` | `5m` | Terminal saati ile sunucu saati arasındaki izin verilen fark |
 | `OUTBOX_POLL_INTERVAL` | `200ms` | Outbox relay'in Kafka'ya gönderim aralığı |
 | `KAFKA_TOPIC_PARTITIONS` / `KAFKA_TOPIC_REPLICAS` | `6` / `1` | Uygulamanın açılışta oluşturduğu topic'ler için. Production'da replicas en az 3 olmalı. |
+| `ROUTING_CONSUMER_CONCURRENCY` | `3` | routing-service consumer thread sayısı. Partition sayısından fazlası boşta kalır. |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
 
 ## 📊 İzleme
@@ -108,6 +113,31 @@ docker exec ps-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server
 ```
 
 Kafka kapalıyken ödeme alınmaya devam eder. Event'ler outbox'ta birikir ve Kafka geri geldiğinde sırayla gönderilir.
+
+### Dead letter topic'ler (DLT)
+
+İşlenemeyen mesajlar 3 denemeden sonra `<topic>.DLT`'ye gider (bozuk mesajlar hemen) ve `Message sent to DLT` ile ERROR log'lanır.
+DLT'de mesaj olması her zaman incelenmelidir; o ödeme akışın dışında kalmıştır.
+
+```bash
+docker exec ps-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic payment.requested.DLT --from-beginning --property print.key=true --property print.headers=true
+```
+
+### Routing
+
+| Metrik | Anlamı |
+|---|---|
+| `routing_decisions_total{outcome,reason,bank}` | Banka ve sebep bazında karar sayısı. Failover oranı ve red sebepleri buradan izlenir. |
+| `cache_gets_total{cache="bin_lookup",result}` | BIN cache hit/miss |
+
+Banka durumunu elle değiştirme (operasyon):
+
+```bash
+curl -s localhost:8082/v1/admin/banks
+curl -s -X PUT localhost:8082/v1/admin/banks/YKB/passive
+curl -s -X PUT localhost:8082/v1/admin/banks/YKB/active
+```
 - Prometheus, Grafana ve Jaeger PS-8 ile eklenecek.
 
 ## 🚀 Deploy

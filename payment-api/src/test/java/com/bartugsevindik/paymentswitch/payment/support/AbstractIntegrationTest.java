@@ -7,7 +7,7 @@ package com.bartugsevindik.paymentswitch.payment.support;
 
 import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
 import com.bartugsevindik.paymentswitch.payment.controller.PaymentController;
-import com.bartugsevindik.paymentswitch.payment.outbox.relay.OutboxRelay;
+import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxRelay;
 import com.bartugsevindik.paymentswitch.payment.terminal.dto.TerminalCreateRequest;
 import com.bartugsevindik.paymentswitch.payment.terminal.dto.TerminalDTO;
 import com.bartugsevindik.paymentswitch.payment.terminal.security.RequestSigner;

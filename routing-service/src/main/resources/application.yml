@@ -7,6 +7,60 @@ spring:
   threads:
     virtual:
       enabled: true
+  datasource:
+    url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DB:payment_switch}
+    username: ${PG_USERNAME:payment}
+    password: ${PG_PASSWORD:payment}
+    hikari:
+      maximum-pool-size: ${PG_POOL_SIZE:20}
+      connection-timeout: 3000
+      # Connection'ın search_path'i. Native sorgular (outbox, inbox) şema belirtmeden routing şemasına gider.
+      # URL parametresi (currentSchema) yerine burada; URL override edilse de (Testcontainers, k8s secret) korunur.
+      schema: routing
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: routing
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    # Her servis kendi şemasının sahibi. Aynı Postgres sunucusu, ayrı şema.
+    schemas: routing
+    default-schema: routing
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    consumer:
+      group-id: routing-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        # Offset listener başarıyla döndükten sonra commit edilir; aradaki çökme mesajı tekrar getirir (inbox yakalar)
+        enable.auto.commit: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
+        delivery.timeout.ms: 5000
+        request.timeout.ms: 3000
+        max.block.ms: 3000
+    listener:
+      # Partition sayısı kadar consumer thread; fazlası boşta kalır
+      concurrency: ${ROUTING_CONSUMER_CONCURRENCY:3}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
 
 management:
   endpoints:
@@ -17,3 +71,37 @@ management:
     health:
       probes:
         enabled: true
+
+logging:
+  level:
+    com.bartugsevindik.paymentswitch: ${LOG_LEVEL:INFO}
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
+
+application:
+  outbox:
+    poll-interval: ${OUTBOX_POLL_INTERVAL:200ms}
+  kafka:
+    topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
+    topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  routing:
+    bin-cache-ttl: 1h
+    bin-cache-size: 100000
+    # Bir pod'da pasife alınan banka diğer pod'lara en geç bu sürede yansır
+    bank-cache-ttl: 5s
+
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  structured:
+    format:
+      console: ecs

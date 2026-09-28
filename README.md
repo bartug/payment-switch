@@ -14,6 +14,7 @@ POS ──► payment-api ──► Kafka ──► routing-service ──► ba
 
 Detaylı akış: [docs/02-odeme-akisi.md](docs/02-odeme-akisi.md) · Domain sözlüğü: [docs/01-domain-sozlugu.md](docs/01-domain-sozlugu.md) ·
 Terminal entegrasyonu: [docs/03-terminal-kimlik-dogrulama.md](docs/03-terminal-kimlik-dogrulama.md) ·
+Routing: [docs/04-routing.md](docs/04-routing.md) ·
 Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
 
 ## 1. Geliştirme Ortamı
@@ -25,18 +26,21 @@ Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
 ```bash
 docker compose up -d
 ./mvnw clean verify
+./mvnw install -DskipTests
 ./mvnw -pl payment-api spring-boot:run
+./mvnw -pl routing-service spring-boot:run
 ```
 
-Swagger: http://localhost:8081/swagger-ui.html
+Swagger: http://localhost:8081/swagger-ui.html (payment-api) · http://localhost:8082/swagger-ui.html (routing-service)
 
 ## 2. Modüller
 
 | Modül | Port | Sorumluluk |
 |---|---|---|
 | `common` | - | Ortak response yapısı, exception'lar, `Money`, event'ler |
+| `messaging` | - | Outbox, inbox, event okuma, retry ve DLT (Spring Boot auto-configuration) |
 | `payment-api` | 8081 | Ödeme karşılama, idempotency, durum yönetimi |
-| `routing-service` | 8082 | BIN çözümleme ve banka seçimi |
+| `routing-service` | 8082 | BIN çözümleme, kural zinciri ile banka seçimi, failover |
 | `bank-adapter` | 8083 | Banka protokol dönüşümü, timeout, reversal |
 | `bank-simulator` | 8090 | Sahte banka API'leri ve hata senaryoları |
 
@@ -49,8 +53,8 @@ Swagger: http://localhost:8081/swagger-ui.html
 | PS-2 | Idempotency-Key ([ADR-002](docs/adr/ADR-002-idempotency.md)) | ✅ |
 | PS-2 | Terminal HMAC imzası ([ADR-003](docs/adr/ADR-003-terminal-hmac-imza.md)) | ✅ |
 | PS-3 | Transactional outbox, Kafka ([ADR-004](docs/adr/ADR-004-transactional-outbox.md)) | ✅ |
-| PS-4 | BIN tabanlı routing, kural zinciri | ⏳ |
-| PS-5 | Bank adapter, resilience, inquiry ve reversal | |
+| PS-4 | BIN tabanlı routing, kural zinciri, inbox, DLT ([ADR-005](docs/adr/ADR-005-routing-ve-consumer-tasarimi.md)) | ✅ |
+| PS-5 | Bank adapter, resilience, inquiry ve reversal | ⏳ |
 | PS-6 | Sonuç işleme, webhook, void ve refund | |
 | PS-7 | Double-entry ledger, mutabakat | |
 | PS-8 | Ölçekleme, OpenTelemetry, Gatling | |
@@ -106,4 +110,6 @@ Copyright (c) $today.year. Bartuğ Sevindik <bartugsevindik@gmail.com>
 
 Her servis kendi domain paketine sahiptir (`com.bartugsevindik.paymentswitch.<modül>`). Paket içi katmanlar
 `controller`, `service`, `service/impl`, `repository`, `entity`, `dto`, `mapper`, `config` ve `enums` şeklindedir.
-Servisler arası paylaşılan her şey `common` modülündedir. DB şeması Flyway ile yönetilir (`ddl-auto: validate`).
+Servisler arası paylaşılan her şey `common` modülündedir, güvenilir mesajlaşma altyapısı `messaging` modülündedir.
+Her servis aynı Postgres sunucusunda kendi şemasının sahibidir ve servisler arasında veri sadece Kafka event'leriyle geçer.
+DB şeması Flyway ile yönetilir (`ddl-auto: validate`).

@@ -5,6 +5,8 @@
 
 package com.bartugsevindik.paymentswitch.payment.service;
 
+import com.bartugsevindik.paymentswitch.common.event.PaymentRoutingResultEvent;
+import com.bartugsevindik.paymentswitch.messaging.consumer.IncomingEvent;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentCreateRequest;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentDTO;
 import com.bartugsevindik.paymentswitch.payment.idempotency.dto.IdempotentResult;
@@ -47,4 +49,15 @@ public interface PaymentService {
      * @since 28.09.2026 - PS-1
      */
     PaymentDTO getPayment(TerminalPrincipal terminal, String paymentId);
+
+    /**
+     * <h1>Routing Sonucunu İşleme</h1>
+     * <p>routing-service'in kararına göre ödemeyi {@code ROUTED} ya da {@code FAILED} durumuna çeker.
+     * Aynı event ikinci kez gelirse hiçbir şey yapılmaz.</p>
+     *
+     * @param event {@code payment.routing.results} topic'inden gelen event
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 28.09.2026 - PS-4
+     */
+    void applyRoutingResult(IncomingEvent<PaymentRoutingResultEvent> event);
 }

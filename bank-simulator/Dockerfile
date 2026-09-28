@@ -7,6 +7,7 @@ WORKDIR /app
 COPY .mvn/ .mvn
 COPY mvnw pom.xml ./
 COPY common/pom.xml common/
+COPY messaging/pom.xml messaging/
 COPY payment-api/pom.xml payment-api/
 COPY routing-service/pom.xml routing-service/
 COPY bank-adapter/pom.xml bank-adapter/
@@ -14,6 +15,7 @@ COPY bank-simulator/pom.xml bank-simulator/
 # Sadece bağımlılıkları indir (kaynak kodu henüz kopyalanmadığı için cache'lenecek)
 RUN ./mvnw -pl bank-simulator -am dependency:go-offline -B
 COPY common/src common/src
+COPY messaging/src messaging/src
 COPY bank-simulator/src bank-simulator/src
 
 RUN ./mvnw -pl bank-simulator -am clean package -DskipTests -B && \

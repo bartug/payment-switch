@@ -27,6 +27,13 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    consumer:
+      group-id: payment-api
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        enable.auto.commit: false
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -82,6 +89,7 @@ application:
     batch-size: 100
     send-timeout: 5s
     retention: 7d
+  kafka:
     topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
   terminal-auth:
