@@ -5,7 +5,6 @@
 
 package com.bartugsevindik.paymentswitch.payment.dto;
 
-import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
@@ -28,20 +27,8 @@ import java.math.BigDecimal;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(name = "PaymentCreateRequest", description = "POS terminalinden gelen ödeme isteği")
+@Schema(name = "PaymentCreateRequest", description = "POS terminalinden gelen ödeme isteği. Üye işyeri ve terminal bilgisi imzalı header'lardan alınır.")
 public class PaymentCreateRequest {
-
-    @NotBlank
-    @Schema(description = "Üye işyeri numarası", example = "MRC0000001")
-    private String merchantId;
-
-    @NotBlank
-    @Schema(description = "Terminal numarası", example = "TRM00000001")
-    private String terminalId;
-
-    @NotNull
-    @Schema(description = "Terminal tipi", example = "VIRTUAL", allowableValues = {"PHYSICAL", "VIRTUAL"})
-    private TerminalType terminalType;
 
     @NotNull
     @DecimalMin(value = "0.01", message = "Tutar sıfırdan büyük olmalıdır.")

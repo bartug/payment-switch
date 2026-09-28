@@ -11,6 +11,10 @@ import org.springframework.http.HttpStatus;
 public enum ResponseHelper {
     ;
 
+    public static ResponseMessage created(String message, Object object) {
+        return build(true, message, object, HttpStatus.CREATED);
+    }
+
     public static ResponseMessage success(String message, Object object) {
         return build(true, message, object, HttpStatus.OK);
     }
@@ -21,6 +25,14 @@ public enum ResponseHelper {
 
     public static ResponseMessage badRequest(String message) {
         return build(false, message, null, HttpStatus.BAD_REQUEST);
+    }
+
+    public static ResponseMessage unauthorized(String message) {
+        return build(false, message, null, HttpStatus.UNAUTHORIZED);
+    }
+
+    public static ResponseMessage forbidden(String message) {
+        return build(false, message, null, HttpStatus.FORBIDDEN);
     }
 
     public static ResponseMessage notFound(String message) {

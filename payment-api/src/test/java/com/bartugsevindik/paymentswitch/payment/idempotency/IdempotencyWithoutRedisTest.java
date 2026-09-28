@@ -10,13 +10,10 @@ import com.bartugsevindik.paymentswitch.payment.idempotency.lock.IdempotencyLock
 import com.bartugsevindik.paymentswitch.payment.idempotency.lock.LockResult;
 import com.bartugsevindik.paymentswitch.payment.repository.PaymentRepository;
 import com.bartugsevindik.paymentswitch.payment.support.AbstractIntegrationTest;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +26,6 @@ import java.util.concurrent.Future;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
  * Redis çöktüğünde kilit fail-open olur, yani her istek kilidi almış sayılır.
@@ -41,21 +37,14 @@ class IdempotencyWithoutRedisTest extends AbstractIntegrationTest {
     private IdempotencyLock idempotencyLock;
 
     @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
     private PaymentRepository paymentRepository;
 
     @Test
     void kilitYokkenDbConstraintCiftOdemeyiEngeller() throws Exception {
         when(idempotencyLock.tryAcquire(anyString(), anyString())).thenReturn(LockResult.SKIPPED);
 
+        TestTerminal terminal = newTerminal();
         String key = UUID.randomUUID().toString();
-        String merchantId = "MRC" + key.substring(0, 7);
-        String body = VALID_REQUEST.replace("MRC0000001", merchantId);
         int threads = 20;
 
         CountDownLatch start = new CountDownLatch(1);
@@ -65,11 +54,7 @@ class IdempotencyWithoutRedisTest extends AbstractIntegrationTest {
             for (int i = 0; i < threads; i++) {
                 futures.add(executor.submit(() -> {
                     start.await();
-                    return mockMvc.perform(post("/v1/payments")
-                                    .header(PaymentController.IDEMPOTENCY_KEY_HEADER, key)
-                                    .contentType(MediaType.APPLICATION_JSON)
-                                    .content(body))
-                            .andReturn().getResponse();
+                    return mockMvc.perform(signedPost(terminal, key, VALID_REQUEST)).andReturn().getResponse();
                 }));
             }
             start.countDown();
@@ -83,14 +68,6 @@ class IdempotencyWithoutRedisTest extends AbstractIntegrationTest {
         assertThat(responses.stream().map(this::paymentId).distinct()).hasSize(1);
         assertThat(responses).filteredOn(r -> "false".equals(r.getHeader(PaymentController.IDEMPOTENT_REPLAYED_HEADER)))
                 .hasSize(1);
-        assertThat(paymentRepository.findAll().stream().filter(p -> p.getMerchantId().equals(merchantId))).hasSize(1);
-    }
-
-    private String paymentId(MockHttpServletResponse response) {
-        try {
-            return objectMapper.readTree(response.getContentAsString()).at("/object/paymentId").asText();
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+        assertThat(paymentRepository.findAll().stream().filter(p -> p.getMerchantId().equals(terminal.merchantId()))).hasSize(1);
     }
 }

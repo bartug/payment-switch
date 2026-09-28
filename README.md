@@ -13,6 +13,7 @@ POS ──► payment-api ──► Kafka ──► routing-service ──► ba
 ```
 
 Detaylı akış: [docs/02-odeme-akisi.md](docs/02-odeme-akisi.md) · Domain sözlüğü: [docs/01-domain-sozlugu.md](docs/01-domain-sozlugu.md) ·
+Terminal entegrasyonu: [docs/03-terminal-kimlik-dogrulama.md](docs/03-terminal-kimlik-dogrulama.md) ·
 Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
 
 ## 1. Geliştirme Ortamı
@@ -46,8 +47,8 @@ Swagger: http://localhost:8081/swagger-ui.html
 | PS-0 | Domain sözlüğü, akış diyagramları, ADR-001 | ✅ |
 | PS-1 | Multi-module iskelet, `Money`, Payment state machine | ✅ |
 | PS-2 | Idempotency-Key ([ADR-002](docs/adr/ADR-002-idempotency.md)) | ✅ |
-| PS-2 | Terminal HMAC imzası | ⏳ |
-| PS-3 | Transactional outbox, Kafka | |
+| PS-2 | Terminal HMAC imzası ([ADR-003](docs/adr/ADR-003-terminal-hmac-imza.md)) | ✅ |
+| PS-3 | Transactional outbox, Kafka | ⏳ |
 | PS-4 | BIN tabanlı routing, kural zinciri | |
 | PS-5 | Bank adapter, resilience, inquiry ve reversal | |
 | PS-6 | Sonuç işleme, webhook, void ve refund | |

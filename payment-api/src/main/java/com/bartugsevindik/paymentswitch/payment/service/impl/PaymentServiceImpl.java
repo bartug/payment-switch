@@ -21,6 +21,7 @@ import com.bartugsevindik.paymentswitch.payment.idempotency.service.IdempotencyS
 import com.bartugsevindik.paymentswitch.payment.mapper.PaymentMapper;
 import com.bartugsevindik.paymentswitch.payment.repository.PaymentRepository;
 import com.bartugsevindik.paymentswitch.payment.service.PaymentService;
+import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -48,10 +49,11 @@ public class PaymentServiceImpl implements PaymentService {
     /**
      * <h1>Ödeme Oluşturma</h1>
      * <p>Ödemeyi {@code PENDING} durumunda kaydeder. Bankaya gönderim asenkron yapılır,
-     * sonuç {@link #getPayment(String)} ile sorgulanır.</p>
+     * sonuç {@link #getPayment(TerminalPrincipal, String)} ile sorgulanır.</p>
      * <p>Akış: önceki kayıt var mı → Redis kilidi → (payment + idempotency kaydı tek transaction) → kilidi bırak.
      * Transaction bilinçli olarak metodun tamamını kapsamaz; kilit beklenirken DB connection tutulmaz.</p>
      *
+     * @param terminal       İmzası doğrulanmış terminal
      * @param idempotencyKey Client'ın ödeme denemesi başına ürettiği key
      * @param request        POS'tan gelen ödeme isteği
      * @return Oluşturulan ya da daha önce oluşmuş ödeme
@@ -59,9 +61,10 @@ public class PaymentServiceImpl implements PaymentService {
      * @since 28.09.2026 - PS-1
      */
     @Override
-    public IdempotentResult<PaymentDTO> createPayment(@NotNull String idempotencyKey, @NotNull PaymentCreateRequest request) {
-        validateCardData(request);
-        IdempotencyContext context = idempotencyService.createContext(request.getMerchantId(), idempotencyKey, request);
+    public IdempotentResult<PaymentDTO> createPayment(@NotNull TerminalPrincipal terminal, @NotNull String idempotencyKey,
+                                                      @NotNull PaymentCreateRequest request) {
+        validateCardData(terminal, request);
+        IdempotencyContext context = idempotencyService.createContext(terminal.merchantId(), idempotencyKey, request);
 
         Optional<PaymentDTO> replay = findReplay(context);
         if (replay.isPresent()) {
@@ -78,7 +81,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         try {
-            PaymentDTO created = transactionTemplate.execute(status -> persistPayment(context, request));
+            PaymentDTO created = transactionTemplate.execute(status -> persistPayment(terminal, context, request));
             return IdempotentResult.created(created);
         } catch (DataIntegrityViolationException e) {
             // Redis kilidi kaçırdı (fail-open ya da TTL doldu); unique constraint ikinci kaydı engelledi
@@ -96,8 +99,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     /**
      * <h1>Ödeme Getirme</h1>
-     * <p>Ödeme ID'si ile ödemenin güncel durumunu döndürür.</p>
+     * <p>Ödeme ID'si ile ödemenin güncel durumunu döndürür. Terminal sadece kendi üye işyerinin ödemelerini görebilir.</p>
      *
+     * @param terminal  İmzası doğrulanmış terminal
      * @param paymentId Ödeme ID
      * @return Ödeme bilgisi
      * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
@@ -105,15 +109,18 @@ public class PaymentServiceImpl implements PaymentService {
      */
     @Override
     @Transactional(readOnly = true)
-    public PaymentDTO getPayment(@NotNull String paymentId) {
-        return paymentRepository.findByPaymentId(paymentId)
+    public PaymentDTO getPayment(@NotNull TerminalPrincipal terminal, @NotNull String paymentId) {
+        return paymentRepository.findByPaymentIdAndMerchantId(paymentId, terminal.merchantId())
                 .map(paymentMapper::toDto)
                 .orElseThrow(() -> new NotFoundException("Ödeme", "paymentId", paymentId));
     }
 
-    private PaymentDTO persistPayment(IdempotencyContext context, PaymentCreateRequest request) {
+    private PaymentDTO persistPayment(TerminalPrincipal terminal, IdempotencyContext context, PaymentCreateRequest request) {
         Payment payment = paymentMapper.toEntity(request);
         payment.setPaymentId(UUID.randomUUID().toString());
+        payment.setMerchantId(terminal.merchantId());
+        payment.setTerminalId(terminal.terminalId());
+        payment.setTerminalType(terminal.terminalType());
         payment.changeStatus(PaymentStatus.PENDING);
 
         Payment saved = paymentRepository.save(payment);
@@ -138,8 +145,8 @@ public class PaymentServiceImpl implements PaymentService {
     /**
      * Sanal POS'ta kart fiziken olmadığı için CVV zorunludur. Fiziki POS'ta çip verisi kullanılır.
      */
-    private void validateCardData(PaymentCreateRequest request) {
-        if (request.getTerminalType() == TerminalType.VIRTUAL && request.getCvv() == null) {
+    private void validateCardData(TerminalPrincipal terminal, PaymentCreateRequest request) {
+        if (terminal.terminalType() == TerminalType.VIRTUAL && request.getCvv() == null) {
             throw new BadRequestException("Sanal POS işlemlerinde CVV zorunludur.");
         }
     }

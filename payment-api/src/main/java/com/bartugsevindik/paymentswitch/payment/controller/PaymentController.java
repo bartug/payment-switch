@@ -11,6 +11,7 @@ import com.bartugsevindik.paymentswitch.payment.dto.PaymentCreateRequest;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentDTO;
 import com.bartugsevindik.paymentswitch.payment.idempotency.dto.IdempotentResult;
 import com.bartugsevindik.paymentswitch.payment.service.PaymentService;
+import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -28,6 +29,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -57,6 +59,7 @@ public class PaymentController {
      * <p>POS'tan gelen ödeme isteğini karşılar ve {@code PENDING} durumunda kaydeder.
      * Aynı {@code Idempotency-Key} ile tekrar gelirse yeni ödeme oluşturmaz.</p>
      *
+     * @param terminal       İmzası doğrulanmış terminal
      * @param idempotencyKey Ödeme denemesi başına üretilen key
      * @param request        Ödeme isteği
      * @return Oluşturulan ödeme
@@ -77,11 +80,14 @@ public class PaymentController {
                             schema = @Schema(type = "boolean"))
             ),
             @ApiResponse(responseCode = "400", description = "İstek doğrulanamadı ya da Idempotency-Key eksik."),
+            @ApiResponse(responseCode = "401", description = "Terminal imzası doğrulanamadı ya da zaman damgası geçersiz."),
+            @ApiResponse(responseCode = "403", description = "Terminal işlem almaya kapalı."),
             @ApiResponse(responseCode = "409", description = "Aynı key ile gelen istek hâlâ işleniyor. Retry-After kadar bekleyip tekrar deneyin."),
             @ApiResponse(responseCode = "422", description = "Idempotency-Key daha önce farklı bir istek ile kullanılmış.")
     })
     @PostMapping
     public ResponseEntity<ResponseMessage> createPayment(
+            @Parameter(hidden = true) @RequestAttribute(TerminalPrincipal.REQUEST_ATTRIBUTE) TerminalPrincipal terminal,
             @Parameter(description = "Ödeme denemesi başına üretilen tekil key (UUID önerilir). Retry'da aynı key gönderilmelidir.",
                        required = true, example = "7c9e6679-7425-40de-944b-e07fc1f90ae7")
             @RequestHeader(IDEMPOTENCY_KEY_HEADER)
@@ -95,9 +101,6 @@ public class PaymentController {
                             schema = @Schema(implementation = PaymentCreateRequest.class),
                             examples = @ExampleObject(value = """
                                     {
-                                      "merchantId": "MRC0000001",
-                                      "terminalId": "TRM00000001",
-                                      "terminalType": "VIRTUAL",
                                       "amount": 1250.50,
                                       "currency": "TRY",
                                       "installmentCount": 3,
@@ -110,7 +113,7 @@ public class PaymentController {
                     )
             )
             @Valid @RequestBody PaymentCreateRequest request) {
-        IdempotentResult<PaymentDTO> result = paymentService.createPayment(idempotencyKey, request);
+        IdempotentResult<PaymentDTO> result = paymentService.createPayment(terminal, idempotencyKey, request);
         String message = result.replayed() ? "Ödeme daha önce alındı." : "Ödeme alındı.";
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .header(IDEMPOTENT_REPLAYED_HEADER, String.valueOf(result.replayed()))
@@ -121,6 +124,7 @@ public class PaymentController {
      * <h1>Ödeme Getir</h1>
      * <p>Ödemenin güncel durumunu döndürür.</p>
      *
+     * @param terminal  İmzası doğrulanmış terminal
      * @param paymentId Ödeme ID
      * @return Ödeme bilgisi
      * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
@@ -134,11 +138,14 @@ public class PaymentController {
                     description = "Ödeme bulundu.",
                     content = @Content(schema = @Schema(implementation = PaymentDTO.class))
             ),
-            @ApiResponse(responseCode = "404", description = "Ödeme bulunamadı.")
+            @ApiResponse(responseCode = "401", description = "Terminal imzası doğrulanamadı."),
+            @ApiResponse(responseCode = "404", description = "Ödeme bulunamadı ya da terminalin üye işyerine ait değil.")
     })
     @GetMapping("/{paymentId}")
-    public ResponseEntity<ResponseMessage> getPayment(@PathVariable String paymentId) {
-        PaymentDTO dto = paymentService.getPayment(paymentId);
+    public ResponseEntity<ResponseMessage> getPayment(
+            @Parameter(hidden = true) @RequestAttribute(TerminalPrincipal.REQUEST_ATTRIBUTE) TerminalPrincipal terminal,
+            @PathVariable String paymentId) {
+        PaymentDTO dto = paymentService.getPayment(terminal, paymentId);
         return ResponseEntity.ok(ResponseHelper.success("Ödeme getirildi.", dto));
     }
 }

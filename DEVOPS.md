@@ -49,12 +49,21 @@ docker build -f payment-api/Dockerfile -t payment-switch/payment-api:1.0.0 .
 
 ### Step 4: Test
 
+Önce bir terminal tanımlanır, dönen `secret` ile istekler imzalanır:
+
 ```bash
-curl -s -X POST http://localhost:8081/v1/payments \
+curl -s -X POST http://localhost:8081/v1/admin/terminals \
   -H 'Content-Type: application/json' \
-  -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"merchantId":"MRC0000001","terminalId":"TRM00000001","terminalType":"VIRTUAL","amount":1250.50,"currency":"TRY","installmentCount":3,"cardNumber":"5400617020092306","expiryMonth":"12","expiryYear":"28","cvv":"000"}'
+  -d '{"terminalId":"TRM00000001","merchantId":"MRC0000001","terminalType":"VIRTUAL"}'
+
+export TERMINAL_ID=TRM00000001
+export TERMINAL_SECRET=<dönen secret>
+
+scripts/pos-request.sh POST /v1/payments \
+  '{"amount":1250.50,"currency":"TRY","installmentCount":3,"cardNumber":"5400617020092306","expiryMonth":"12","expiryYear":"28","cvv":"000"}'
 ```
+
+İmza algoritması: [docs/03-terminal-kimlik-dogrulama.md](docs/03-terminal-kimlik-dogrulama.md)
 
 ## ⚙️ Ortam Değişkenleri
 
@@ -69,6 +78,8 @@ curl -s -X POST http://localhost:8081/v1/payments \
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Idempotency kilidi. Kapalıysa uygulama çalışmaya devam eder (fail-open). |
 | `IDEMPOTENCY_HASH_SECRET` | `local-dev-secret-change-me` | İstek hash'i için HMAC secret. **Production'da zorunlu**, varsayılan yok. |
 | `IDEMPOTENCY_RECORD_TTL` / `IDEMPOTENCY_LOCK_TTL` | `24h` / `10s` | |
+| `TERMINAL_SECRET_MASTER_KEY` | lokal için sabit bir key | Terminal secret'larını şifreleyen AES-256 key (Base64, 32 byte). `openssl rand -base64 32`. **Production'da zorunlu**, KMS/Vault'tan gelmeli. |
+| `TERMINAL_TIMESTAMP_TOLERANCE` | `5m` | Terminal saati ile sunucu saati arasındaki izin verilen fark |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
 
 ## 📊 İzleme

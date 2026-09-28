@@ -9,19 +9,14 @@ import com.bartugsevindik.paymentswitch.payment.controller.PaymentController;
 import com.bartugsevindik.paymentswitch.payment.idempotency.repository.IdempotencyRecordRepository;
 import com.bartugsevindik.paymentswitch.payment.repository.PaymentRepository;
 import com.bartugsevindik.paymentswitch.payment.support.AbstractIntegrationTest;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,18 +25,11 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class IdempotencyIntegrationTest extends AbstractIntegrationTest {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @Autowired
     private PaymentRepository paymentRepository;
@@ -51,27 +39,29 @@ class IdempotencyIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void ayniKeyIleTekrarGelenIstekYeniOdemeOlusturmaz() throws Exception {
+        TestTerminal terminal = newTerminal();
         String key = UUID.randomUUID().toString();
 
-        MockHttpServletResponse first = mockMvc.perform(paymentRequest(key, VALID_REQUEST))
+        MockHttpServletResponse first = mockMvc.perform(signedPost(terminal, key, VALID_REQUEST))
                 .andExpect(status().isAccepted())
                 .andExpect(header().string(PaymentController.IDEMPOTENT_REPLAYED_HEADER, "false"))
                 .andReturn().getResponse();
 
-        MockHttpServletResponse second = mockMvc.perform(paymentRequest(key, VALID_REQUEST))
+        MockHttpServletResponse second = mockMvc.perform(signedPost(terminal, key, VALID_REQUEST))
                 .andExpect(status().isAccepted())
                 .andExpect(header().string(PaymentController.IDEMPOTENT_REPLAYED_HEADER, "true"))
                 .andExpect(jsonPath("$.message").value("Ödeme daha önce alındı."))
                 .andReturn().getResponse();
 
         assertThat(paymentId(second)).isEqualTo(paymentId(first));
-        assertThat(idempotencyRecordRepository.findByMerchantIdAndIdempotencyKey("MRC0000001", key)).isPresent();
+        assertThat(idempotencyRecordRepository.findByMerchantIdAndIdempotencyKey(terminal.merchantId(), key)).isPresent();
     }
 
     @Test
     void alanSirasiVeTutarGosterimiFarkiAyniIstekSayilir() throws Exception {
+        TestTerminal terminal = newTerminal();
         String key = UUID.randomUUID().toString();
-        mockMvc.perform(paymentRequest(key, VALID_REQUEST)).andExpect(status().isAccepted());
+        mockMvc.perform(signedPost(terminal, key, VALID_REQUEST)).andExpect(status().isAccepted());
 
         String reordered = """
                 {
@@ -81,43 +71,42 @@ class IdempotencyIntegrationTest extends AbstractIntegrationTest {
                   "currency": "TRY",
                   "expiryMonth": "12",
                   "expiryYear": "28",
-                  "installmentCount": 3,
-                  "merchantId": "MRC0000001",
-                  "terminalId": "TRM00000001",
-                  "terminalType": "VIRTUAL"
+                  "installmentCount": 3
                 }
                 """;
-        mockMvc.perform(paymentRequest(key, reordered))
+        mockMvc.perform(signedPost(terminal, key, reordered))
                 .andExpect(status().isAccepted())
                 .andExpect(header().string(PaymentController.IDEMPOTENT_REPLAYED_HEADER, "true"));
     }
 
     @Test
     void ayniKeyFarkliTutar422() throws Exception {
+        TestTerminal terminal = newTerminal();
         String key = UUID.randomUUID().toString();
-        mockMvc.perform(paymentRequest(key, VALID_REQUEST)).andExpect(status().isAccepted());
+        mockMvc.perform(signedPost(terminal, key, VALID_REQUEST)).andExpect(status().isAccepted());
 
-        mockMvc.perform(paymentRequest(key, VALID_REQUEST.replace("1250.50", "9999.00")))
+        mockMvc.perform(signedPost(terminal, key, VALID_REQUEST.replace("1250.50", "9999.00")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.message", containsString("farklı bir istek")));
     }
 
     @Test
     void ayniKeyFarkliKart422() throws Exception {
+        TestTerminal terminal = newTerminal();
         String key = UUID.randomUUID().toString();
-        mockMvc.perform(paymentRequest(key, VALID_REQUEST)).andExpect(status().isAccepted());
+        mockMvc.perform(signedPost(terminal, key, VALID_REQUEST)).andExpect(status().isAccepted());
 
         // Kart no WRITE_ONLY olsa da hash'e dahil edilmeli
-        mockMvc.perform(paymentRequest(key, VALID_REQUEST.replace("5400617020092306", "4111111111111111")))
+        mockMvc.perform(signedPost(terminal, key, VALID_REQUEST.replace("5400617020092306", "4111111111111111")))
                 .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
     void farkliUyeIsyerleriAyniKeyiKullanabilir() throws Exception {
         String key = UUID.randomUUID().toString();
-        String first = paymentId(mockMvc.perform(paymentRequest(key, VALID_REQUEST))
+        String first = paymentId(mockMvc.perform(signedPost(newTerminal(), key, VALID_REQUEST))
                 .andExpect(status().isAccepted()).andReturn().getResponse());
-        String second = paymentId(mockMvc.perform(paymentRequest(key, VALID_REQUEST.replace("MRC0000001", "MRC0000002")))
+        String second = paymentId(mockMvc.perform(signedPost(newTerminal(), key, VALID_REQUEST))
                 .andExpect(status().isAccepted())
                 .andExpect(header().string(PaymentController.IDEMPOTENT_REPLAYED_HEADER, "false"))
                 .andReturn().getResponse());
@@ -127,37 +116,34 @@ class IdempotencyIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void keyEksikse400() throws Exception {
-        mockMvc.perform(post("/v1/payments").contentType(MediaType.APPLICATION_JSON).content(VALID_REQUEST))
+        mockMvc.perform(signedPost(newTerminal(), null, VALID_REQUEST))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Idempotency-Key header'ı zorunludur."));
     }
 
     @Test
     void gecersizFormattakiKey400() throws Exception {
-        mockMvc.perform(paymentRequest("kisa", VALID_REQUEST))
+        mockMvc.perform(signedPost(newTerminal(), "kisa", VALID_REQUEST))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("8-64 karakter")));
     }
 
     @Test
     void esZamanliGelenKopyalardanSadeceBiriOdemeOlusturur() throws Exception {
+        TestTerminal terminal = newTerminal();
         String key = UUID.randomUUID().toString();
-        String merchantId = "MRC" + key.substring(0, 7);
-        String body = VALID_REQUEST.replace("MRC0000001", merchantId);
         int threads = 20;
 
         CountDownLatch start = new CountDownLatch(1);
-        List<Callable<MockHttpServletResponse>> tasks = new ArrayList<>();
-        for (int i = 0; i < threads; i++) {
-            tasks.add(() -> {
-                start.await();
-                return mockMvc.perform(paymentRequest(key, body)).andReturn().getResponse();
-            });
-        }
-
         List<MockHttpServletResponse> responses = new ArrayList<>();
         try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
-            List<Future<MockHttpServletResponse>> futures = tasks.stream().map(executor::submit).toList();
+            List<Future<MockHttpServletResponse>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    return mockMvc.perform(signedPost(terminal, key, VALID_REQUEST)).andReturn().getResponse();
+                }));
+            }
             start.countDown();
             for (Future<MockHttpServletResponse> future : futures) {
                 responses.add(future.get());
@@ -174,21 +160,6 @@ class IdempotencyIntegrationTest extends AbstractIntegrationTest {
                 .map(this::paymentId)
                 .collect(Collectors.toSet());
         assertThat(paymentIds).hasSize(1);
-        assertThat(paymentRepository.findAll().stream().filter(p -> p.getMerchantId().equals(merchantId))).hasSize(1);
-    }
-
-    private MockHttpServletRequestBuilder paymentRequest(String key, String content) {
-        return post("/v1/payments")
-                .header(PaymentController.IDEMPOTENCY_KEY_HEADER, key)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(content);
-    }
-
-    private String paymentId(MockHttpServletResponse response) {
-        try {
-            return objectMapper.readTree(response.getContentAsString()).at("/object/paymentId").asText();
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+        assertThat(paymentRepository.findAll().stream().filter(p -> p.getMerchantId().equals(terminal.merchantId()))).hasSize(1);
     }
 }

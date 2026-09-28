@@ -21,4 +21,13 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
      * @return Ödeme kaydı
      */
     Optional<Payment> findByPaymentId(String paymentId);
+
+    /**
+     * Ödemeyi sadece ait olduğu üye işyeri için getirir. Başka üye işyerinin ödemesi yokmuş gibi davranılır (IDOR).
+     *
+     * @param paymentId  Ödeme ID
+     * @param merchantId Üye işyeri numarası
+     * @return Ödeme kaydı
+     */
+    Optional<Payment> findByPaymentIdAndMerchantId(String paymentId, String merchantId);
 }

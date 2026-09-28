@@ -61,6 +61,10 @@ application:
     lock-ttl: ${IDEMPOTENCY_LOCK_TTL:10s}
     hash-secret: ${IDEMPOTENCY_HASH_SECRET:local-dev-secret-change-me}
     cleanup-cron: "0 */10 * * * *"
+  terminal-auth:
+    timestamp-tolerance: ${TERMINAL_TIMESTAMP_TOLERANCE:5m}
+    # Sadece lokal geliştirme için. openssl rand -base64 32 ile üretildi.
+    secret-master-key: ${TERMINAL_SECRET_MASTER_KEY:sj7F1GLxx941ATVJkomSsbYXG70Z6bwlVpObX4y1f8k=}
 
 ---
 spring:
@@ -72,6 +76,8 @@ application:
   idempotency:
     # Production'da varsayılan değer yok, secret verilmezse uygulama açılmaz
     hash-secret: ${IDEMPOTENCY_HASH_SECRET}
+  terminal-auth:
+    secret-master-key: ${TERMINAL_SECRET_MASTER_KEY}
 
 springdoc:
   api-docs:
