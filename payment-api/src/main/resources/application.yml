@@ -25,6 +25,13 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Redis takılırsa ödeme isteği beklemesin, kısa sürede fail-open ile DB'ye düşülsün
+      timeout: 300ms
+      connect-timeout: 500ms
 
 springdoc:
   api-docs:
@@ -45,12 +52,26 @@ management:
 logging:
   level:
     com.bartugsevindik.paymentswitch: ${LOG_LEVEL:INFO}
+    # Idempotency çakışmasında beklenen unique constraint hatasını ERROR olarak basıyor. Exception yine fırlatılıyor.
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
+
+application:
+  idempotency:
+    record-ttl: ${IDEMPOTENCY_RECORD_TTL:24h}
+    lock-ttl: ${IDEMPOTENCY_LOCK_TTL:10s}
+    hash-secret: ${IDEMPOTENCY_HASH_SECRET:local-dev-secret-change-me}
+    cleanup-cron: "0 */10 * * * *"
 
 ---
 spring:
   config:
     activate:
       on-profile: production
+
+application:
+  idempotency:
+    # Production'da varsayılan değer yok, secret verilmezse uygulama açılmaz
+    hash-secret: ${IDEMPOTENCY_HASH_SECRET}
 
 springdoc:
   api-docs:

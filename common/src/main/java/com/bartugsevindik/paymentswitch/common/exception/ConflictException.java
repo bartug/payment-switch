@@ -14,8 +14,18 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 public class ConflictException extends RuntimeException {
     private final String message;
 
+    /**
+     * Doluysa cevaba {@code Retry-After} header'ı eklenir. Client'ın ne kadar bekleyip tekrar deneyeceğini söyler.
+     */
+    private final Integer retryAfterSeconds;
+
     public ConflictException(String message) {
+        this(message, null);
+    }
+
+    public ConflictException(String message, Integer retryAfterSeconds) {
         super(message);
         this.message = message;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
 }

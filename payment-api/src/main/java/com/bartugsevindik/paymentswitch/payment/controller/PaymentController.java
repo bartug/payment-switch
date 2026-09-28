@@ -9,8 +9,11 @@ import com.bartugsevindik.paymentswitch.common.dto.ResponseMessage;
 import com.bartugsevindik.paymentswitch.common.helpers.ResponseHelper;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentCreateRequest;
 import com.bartugsevindik.paymentswitch.payment.dto.PaymentDTO;
+import com.bartugsevindik.paymentswitch.payment.idempotency.dto.IdempotentResult;
 import com.bartugsevindik.paymentswitch.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -18,6 +21,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +29,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,29 +47,46 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/payments")
 @RequiredArgsConstructor
 public class PaymentController {
+    public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+    public static final String IDEMPOTENT_REPLAYED_HEADER = "Idempotent-Replayed";
+
     private final PaymentService paymentService;
 
     /**
      * <h1>Ödeme Oluştur</h1>
-     * <p>POS'tan gelen ödeme isteğini karşılar ve {@code PENDING} durumunda kaydeder.</p>
+     * <p>POS'tan gelen ödeme isteğini karşılar ve {@code PENDING} durumunda kaydeder.
+     * Aynı {@code Idempotency-Key} ile tekrar gelirse yeni ödeme oluşturmaz.</p>
      *
-     * @param request Ödeme isteği
+     * @param idempotencyKey Ödeme denemesi başına üretilen key
+     * @param request        Ödeme isteği
      * @return Oluşturulan ödeme
      * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
      * @since 28.09.2026 - PS-1
      */
     @Operation(summary = "Ödeme Oluştur",
-               description = "POS terminalinden gelen ödemeyi karşılar. İşlem asenkron olarak bankaya yönlendirilir, sonuç paymentId ile sorgulanır.")
+               description = """
+                       POS terminalinden gelen ödemeyi karşılar. İşlem asenkron olarak bankaya yönlendirilir, sonuç paymentId ile sorgulanır.
+                       Ağ hatası sonrası aynı istek **aynı Idempotency-Key** ile tekrar gönderilmelidir; yeni ödeme oluşmaz, mevcut ödemenin güncel hali döner.
+                       """)
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "202",
-                    description = "Ödeme alındı, işleniyor.",
-                    content = @Content(schema = @Schema(implementation = PaymentDTO.class))
+                    description = "Ödeme alındı, işleniyor. Tekrar eden istekte `Idempotent-Replayed: true` header'ı döner.",
+                    content = @Content(schema = @Schema(implementation = PaymentDTO.class)),
+                    headers = @Header(name = IDEMPOTENT_REPLAYED_HEADER, description = "İstek daha önce işlendiyse true",
+                            schema = @Schema(type = "boolean"))
             ),
-            @ApiResponse(responseCode = "400", description = "İstek doğrulanamadı.")
+            @ApiResponse(responseCode = "400", description = "İstek doğrulanamadı ya da Idempotency-Key eksik."),
+            @ApiResponse(responseCode = "409", description = "Aynı key ile gelen istek hâlâ işleniyor. Retry-After kadar bekleyip tekrar deneyin."),
+            @ApiResponse(responseCode = "422", description = "Idempotency-Key daha önce farklı bir istek ile kullanılmış.")
     })
     @PostMapping
     public ResponseEntity<ResponseMessage> createPayment(
+            @Parameter(description = "Ödeme denemesi başına üretilen tekil key (UUID önerilir). Retry'da aynı key gönderilmelidir.",
+                       required = true, example = "7c9e6679-7425-40de-944b-e07fc1f90ae7")
+            @RequestHeader(IDEMPOTENCY_KEY_HEADER)
+            @Pattern(regexp = "^[A-Za-z0-9_-]{8,64}$", message = "Idempotency-Key 8-64 karakter olmalı ve sadece harf, rakam, '-' ve '_' içermelidir.")
+            String idempotencyKey,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     description = "Ödeme isteği",
@@ -88,9 +110,11 @@ public class PaymentController {
                     )
             )
             @Valid @RequestBody PaymentCreateRequest request) {
-        PaymentDTO dto = paymentService.createPayment(request);
+        IdempotentResult<PaymentDTO> result = paymentService.createPayment(idempotencyKey, request);
+        String message = result.replayed() ? "Ödeme daha önce alındı." : "Ödeme alındı.";
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(ResponseHelper.accepted("Ödeme alındı.", dto));
+                .header(IDEMPOTENT_REPLAYED_HEADER, String.valueOf(result.replayed()))
+                .body(ResponseHelper.accepted(message, result.body()));
     }
 
     /**

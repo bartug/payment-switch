@@ -99,8 +99,11 @@ services:
       KAFKA_BROKERS: kafka:29092
       REDIS_HOST: redis
       TZ: ${TZ:-Europe/Istanbul}
+      IDEMPOTENCY_HASH_SECRET: ${IDEMPOTENCY_HASH_SECRET:-local-dev-secret-change-me}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - app-network

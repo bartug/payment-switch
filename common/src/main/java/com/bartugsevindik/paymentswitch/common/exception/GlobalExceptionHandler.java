@@ -18,9 +18,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 @Hidden
@@ -49,6 +52,32 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(ResponseHelper.badRequest("İstek gövdesi okunamadı."));
     }
 
+    @Override
+    protected ResponseEntity<Object> handleServletRequestBindingException(@NotNull ServletRequestBindingException ex,
+                                                                          @NotNull HttpHeaders headers,
+                                                                          @NotNull HttpStatusCode status,
+                                                                          @NotNull WebRequest request) {
+        String message = ex instanceof MissingRequestHeaderException missingHeader
+                ? missingHeader.getHeaderName() + " header'ı zorunludur."
+                : "İstek parametreleri okunamadı.";
+        return ResponseEntity.badRequest().body(ResponseHelper.badRequest(message));
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(@NotNull HandlerMethodValidationException ex,
+                                                                            @NotNull HttpHeaders headers,
+                                                                            @NotNull HttpStatusCode status,
+                                                                            @NotNull WebRequest request) {
+        // Header gibi bir parametrede constraint varsa Spring body'yi de method validation ile doğrular
+        String message = ex.getAllErrors().stream()
+                .findFirst()
+                .map(error -> error instanceof FieldError fieldError
+                        ? fieldError.getField() + ": " + fieldError.getDefaultMessage()
+                        : error.getDefaultMessage())
+                .orElse("İstek doğrulanamadı.");
+        return ResponseEntity.badRequest().body(ResponseHelper.badRequest(message));
+    }
+
     @ExceptionHandler(value = NotFoundException.class)
     public @NotNull ResponseEntity<Object> handleNotFoundException(@NotNull NotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -64,8 +93,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(value = ConflictException.class)
     public @NotNull ResponseEntity<Object> handleConflictException(@NotNull ConflictException ex) {
         log.warn("Conflict: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ResponseHelper.conflict(ex.getMessage()));
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.CONFLICT);
+        if (ex.getRetryAfterSeconds() != null) {
+            builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return builder.body(ResponseHelper.conflict(ex.getMessage()));
+    }
+
+    @ExceptionHandler(value = UnprocessableEntityException.class)
+    public @NotNull ResponseEntity<Object> handleUnprocessableEntityException(@NotNull UnprocessableEntityException ex) {
+        log.warn("Unprocessable entity: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ResponseHelper.unprocessable(ex.getMessage()));
     }
 
     @ExceptionHandler(value = Exception.class)

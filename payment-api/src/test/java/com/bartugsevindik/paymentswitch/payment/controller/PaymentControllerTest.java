@@ -5,18 +5,16 @@
 
 package com.bartugsevindik.paymentswitch.payment.controller;
 
+import com.bartugsevindik.paymentswitch.payment.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+
+import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -24,14 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@Testcontainers
-class PaymentControllerTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+class PaymentControllerTest extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -39,26 +30,9 @@ class PaymentControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    private static final String VALID_REQUEST = """
-            {
-              "merchantId": "MRC0000001",
-              "terminalId": "TRM00000001",
-              "terminalType": "VIRTUAL",
-              "amount": 1250.50,
-              "currency": "TRY",
-              "installmentCount": 3,
-              "cardNumber": "5400617020092306",
-              "expiryMonth": "12",
-              "expiryYear": "28",
-              "cvv": "000"
-            }
-            """;
-
     @Test
     void odemeOlusturulupGetirilir() throws Exception {
-        String body = mockMvc.perform(post("/v1/payments")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_REQUEST))
+        String body = mockMvc.perform(paymentRequest(VALID_REQUEST))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.object.paymentStatus").value("PENDING"))
                 .andExpect(jsonPath("$.object.amount").value(1250.50))
@@ -77,18 +51,14 @@ class PaymentControllerTest {
 
     @Test
     void luhnKontroluBasarisizKartReddedilir() throws Exception {
-        mockMvc.perform(post("/v1/payments")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_REQUEST.replace("5400617020092306", "5400617020092307")))
+        mockMvc.perform(paymentRequest(VALID_REQUEST.replace("5400617020092306", "5400617020092307")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("cardNumber")));
     }
 
     @Test
     void sanalPosCvvsizReddedilir() throws Exception {
-        mockMvc.perform(post("/v1/payments")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_REQUEST.replace("\"cvv\": \"000\"", "\"cvv\": null")))
+        mockMvc.perform(paymentRequest(VALID_REQUEST.replace("\"cvv\": \"000\"", "\"cvv\": null")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Sanal POS işlemlerinde CVV zorunludur."));
     }
@@ -98,5 +68,12 @@ class PaymentControllerTest {
         mockMvc.perform(get("/v1/payments/{paymentId}", "yok"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    private MockHttpServletRequestBuilder paymentRequest(String content) {
+        return post("/v1/payments")
+                .header(PaymentController.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(content);
     }
 }

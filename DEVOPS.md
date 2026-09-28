@@ -52,6 +52,7 @@ docker build -f payment-api/Dockerfile -t payment-switch/payment-api:1.0.0 .
 ```bash
 curl -s -X POST http://localhost:8081/v1/payments \
   -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $(uuidgen)" \
   -d '{"merchantId":"MRC0000001","terminalId":"TRM00000001","terminalType":"VIRTUAL","amount":1250.50,"currency":"TRY","installmentCount":3,"cardNumber":"5400617020092306","expiryMonth":"12","expiryYear":"28","cvv":"000"}'
 ```
 
@@ -65,7 +66,9 @@ curl -s -X POST http://localhost:8081/v1/payments \
 | `PG_USERNAME` / `PG_PASSWORD` | `payment` / `payment` | Production'da secret store'dan gelmeli |
 | `PG_POOL_SIZE` | `20` | Hikari havuz boyutu |
 | `KAFKA_BROKERS` | `localhost:9092` | |
-| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Idempotency kilidi. Kapalıysa uygulama çalışmaya devam eder (fail-open). |
+| `IDEMPOTENCY_HASH_SECRET` | `local-dev-secret-change-me` | İstek hash'i için HMAC secret. **Production'da zorunlu**, varsayılan yok. |
+| `IDEMPOTENCY_RECORD_TTL` / `IDEMPOTENCY_LOCK_TTL` | `24h` / `10s` | |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
 
 ## 📊 İzleme
