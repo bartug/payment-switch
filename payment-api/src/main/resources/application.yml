@@ -94,13 +94,14 @@ application:
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
   card-vault:
     ttl: ${CARD_VAULT_TTL:15m}
-    # Sadece lokal geliştirme için. Terminal master key'den farklı olmalı.
-    encryption-key: ${CARD_VAULT_ENCRYPTION_KEY:XDMfnefDxUXZULppVyk4UfN+FbQa0qImaU8Ji6Cm4gA=}
-    internal-api-token: ${INTERNAL_API_TOKEN:c4024988bb072df540b4ca243ab541f64f37b26e191da507}
+    # Lokal geliştirme değerleri bilerek okunabilir: base64("LOCAL-DEV-ONLY-cardvault-key-001").
+    # Gerçek bir anahtar değildir; production profilinde varsayılan yoktur, env verilmezse uygulama açılmaz.
+    encryption-key: ${CARD_VAULT_ENCRYPTION_KEY:TE9DQUwtREVWLU9OTFktY2FyZHZhdWx0LWtleS0wMDE=}
+    internal-api-token: ${INTERNAL_API_TOKEN:local-dev-only-internal-token}
   terminal-auth:
     timestamp-tolerance: ${TERMINAL_TIMESTAMP_TOLERANCE:5m}
-    # Sadece lokal geliştirme için. openssl rand -base64 32 ile üretildi.
-    secret-master-key: ${TERMINAL_SECRET_MASTER_KEY:sj7F1GLxx941ATVJkomSsbYXG70Z6bwlVpObX4y1f8k=}
+    # base64("LOCAL-DEV-ONLY-terminal-key-0001"). Sadece lokal; production'da KMS/Vault'tan gelir.
+    secret-master-key: ${TERMINAL_SECRET_MASTER_KEY:TE9DQUwtREVWLU9OTFktdGVybWluYWwta2V5LTAwMDE=}
 
 ---
 spring:

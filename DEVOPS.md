@@ -75,6 +75,11 @@ hangi bankaya gittiğini gösterir. Test kartları ve routing senaryoları: [doc
 
 `.env-template` dosyasındaki değişkenler kullanılır. Hepsinin lokal için varsayılan değeri var.
 
+> **Lokal varsayılanlar gerçek anahtar değildir.** Şifreleme anahtarları bilerek okunabilir değerlerden üretildi
+> (örn. `base64("LOCAL-DEV-ONLY-terminal-key-0001")`); repoyu tarayan secret scanner'lar ve okuyanlar bunların
+> sahte olduğunu görebilsin diye. `production` profilinde bu değerlerin hiçbiri yoktur; env verilmezse uygulama açılmaz.
+> Gerçek anahtar üretmek için: `openssl rand -base64 32`
+
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
 | `PG_HOST` / `PG_PORT` / `PG_DB` | `localhost` / `5432` / `payment_switch` | |
@@ -170,7 +175,8 @@ curl -s localhost:8082/v1/admin/banks
 curl -s -X PUT localhost:8082/v1/admin/banks/YKB/passive
 curl -s -X PUT localhost:8082/v1/admin/banks/YKB/active
 ```
-- Prometheus, Grafana ve Jaeger PS-8 ile eklenecek.
+
+Prometheus, Grafana ve Jaeger PS-8 ile eklenecek.
 
 ## 🚀 Deploy
 

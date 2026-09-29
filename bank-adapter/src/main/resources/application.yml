@@ -84,7 +84,8 @@ application:
     consumer-concurrency: ${BANK_CONSUMER_CONCURRENCY:2}
     bank-api-url: ${BANK_API_URL:http://localhost:8090}
     payment-api-url: ${PAYMENT_API_URL:http://localhost:8081}
-    internal-api-token: ${INTERNAL_API_TOKEN:c4024988bb072df540b4ca243ab541f64f37b26e191da507}
+    # payment-api ile aynı lokal değer. Production'da varsayılan yok.
+    internal-api-token: ${INTERNAL_API_TOKEN:local-dev-only-internal-token}
     connect-timeout: 1s
     # Bu süre dolarsa işlem UNKNOWN olur; banka parayı çekmiş olabilir
     read-timeout: ${BANK_READ_TIMEOUT:5s}
