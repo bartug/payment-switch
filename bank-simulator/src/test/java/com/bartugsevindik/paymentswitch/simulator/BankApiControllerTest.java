@@ -143,6 +143,30 @@ class BankApiControllerTest {
                 .andExpect(jsonPath("$.status").value("VOIDED"));
     }
 
+    @Test
+    void gunSonuDosyasindaOnayliSatislarVeIadelerVarIptallerYok() throws Exception {
+        String sale = UUID.randomUUID().toString();
+        String refunded = UUID.randomUUID().toString();
+        String voided = UUID.randomUUID().toString();
+        authorize(sale, 100000);
+        authorize(refunded, 50000);
+        authorize(voided, 25000);
+        refund(refunded, "RF-" + refunded, 20000);
+        mockMvc.perform(post("/banks/YKB/v1/transactions/{orderId}/void", voided));
+
+        String today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Istanbul")).toString();
+        String csv = mockMvc.perform(get("/banks/YKB/v1/settlement-files/{date}", today))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(csv)
+                .startsWith("order_id,type,amount,currency,rrn,auth_code,operation_id,transaction_time")
+                .contains(sale + ",SALE,100000,TRY")
+                .contains(refunded + ",SALE,50000,TRY")
+                .contains(refunded + ",REFUND,20000,TRY")
+                .doesNotContain(voided);
+    }
+
     private org.springframework.test.web.servlet.ResultActions refund(String orderId, String refundId, long amount) throws Exception {
         return mockMvc.perform(post("/banks/YKB/v1/transactions/{orderId}/refunds", orderId)
                 .contentType(MediaType.APPLICATION_JSON)

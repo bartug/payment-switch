@@ -92,6 +92,11 @@ application:
   kafka:
     topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  reconciliation:
+    # Gerçekte her bankanın SFTP / API adresi; lokalde simülatör
+    bank-file-base-url: ${BANK_FILE_BASE_URL:http://localhost:8090}
+    date-tolerance-days: 1
+    cron: "0 0 3 * * *"
   ledger:
     # Üye işyeri tanımlı değilse uygulanan komisyon (baz puan)
     default-commission-rate-bps: 249

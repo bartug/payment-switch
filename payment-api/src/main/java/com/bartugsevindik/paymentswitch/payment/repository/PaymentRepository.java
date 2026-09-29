@@ -5,6 +5,7 @@
 
 package com.bartugsevindik.paymentswitch.payment.repository;
 
+import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import com.bartugsevindik.paymentswitch.payment.entity.Payment;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -50,4 +53,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.paymentId = :paymentId")
     Optional<Payment> findForUpdate(@Param("paymentId") String paymentId);
+
+    /**
+     * Bankaya gönderilmiş ve verilen zaman aralığında oluşturulmuş ödemeler (mutabakat için).
+     *
+     * @param bankCode Banka
+     * @param from     Başlangıç (dahil)
+     * @param to       Bitiş (hariç)
+     * @return Ödemeler
+     */
+    List<Payment> findByBankCodeAndCreatedDateGreaterThanEqualAndCreatedDateLessThan(BankCode bankCode, LocalDateTime from,
+                                                                                     LocalDateTime to);
 }

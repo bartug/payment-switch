@@ -100,6 +100,7 @@ hangi bankaya gittiğini gösterir. Test kartları ve routing senaryoları: [doc
 | `BANK_API_URL` / `PAYMENT_API_URL` | `http://localhost:8090` / `http://localhost:8081` | |
 | `BANK_READ_TIMEOUT` | `5s` | Bu süre dolarsa işlem `UNKNOWN` olur |
 | `BUSINESS_DAY_CUTOFF` | `23:30` | Bu saatten sonra o günün ödemeleri iptal edilemez, sadece iade edilebilir (İstanbul saati) |
+| `BANK_FILE_BASE_URL` | `http://localhost:8090` | Bankaların gün sonu dosyalarının alındığı adres (lokalde simülatör) |
 | `WEBHOOK_POLL_INTERVAL` | `1s` | Webhook dispatcher'ın bekleyen bildirimlere bakma aralığı |
 | `ROUTING_CONSUMER_CONCURRENCY` | `3` | routing-service consumer thread sayısı. Partition sayısından fazlası boşta kalır. |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
@@ -175,6 +176,20 @@ scripts/pos-request.sh GET  /v1/payments/<paymentId>/operations
 |---|---|
 | `bank_operations_total{type,status}` | FAILED oranı artıyorsa |
 | `bank_operations_manual_review_total` | **> 0 ise incele**: iadenin bankada yapılıp yapılmadığı bilinmiyor |
+
+### Ledger ve mutabakat
+
+| Metrik | Alarm önerisi |
+|---|---|
+| `reconciliation_items_total{result="STATUS_MISMATCH"}` | **> 0 ise hemen incele**: kart sahibinden para çekilmiş, üye işyerine başarısız denmiş |
+| `reconciliation_items_total{result="MISSING_IN_OURS"}` | **> 0 ise hemen incele** |
+| `reconciliation_items_total{result="MISSING_IN_BANK"}` | Üye işyeri ödemesini (payout) göndermeden önce kontrol et |
+
+Mutabakat her gece 03:00'te (İstanbul) bir önceki gün için çalışır. Mizan `GET /v1/admin/ledger/trial-balance` ile
+kontrol edilir; `balanced=false` olması mümkün değildir (veritabanı trigger'ı engeller), olursa trigger'ın devre dışı
+bırakıldığı anlamına gelir.
+
+Detay: [docs/07-ledger-ve-mutabakat.md](docs/07-ledger-ve-mutabakat.md)
 
 ### Routing
 

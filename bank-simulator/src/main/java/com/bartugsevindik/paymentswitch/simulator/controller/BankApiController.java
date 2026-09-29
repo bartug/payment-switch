@@ -19,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -28,6 +29,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 /**
  * <h1>BankApiController</h1>
@@ -150,6 +153,24 @@ public class BankApiController {
     public ResponseEntity<BankTransactionResponse> refund(@PathVariable BankCode bankCode, @PathVariable String orderId,
                                                           @Valid @RequestBody BankOperationRequest request) {
         return ResponseEntity.ok(bankSimulatorService.refund(bankCode, orderId, request));
+    }
+
+    /**
+     * <h1>Gün Sonu Dosyası</h1>
+     * <p>Bankanın takas dosyası. Mutabakat bu dosya ile yapılır.</p>
+     *
+     * @param bankCode     Banka
+     * @param businessDate İş günü (yyyy-MM-dd)
+     * @return CSV
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-7
+     */
+    @Operation(summary = "Gün Sonu Dosyası",
+               description = "O günün onaylı satışları ve iadeleri (CSV). İptal edilen ve teknik iptal edilen işlemler dosyada yer almaz.")
+    @GetMapping(value = "/settlement-files/{businessDate}", produces = "text/csv")
+    public ResponseEntity<String> settlementFile(@PathVariable BankCode bankCode,
+                                                 @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate businessDate) {
+        return ResponseEntity.ok(bankSimulatorService.settlementFile(bankCode, businessDate));
     }
 
     /**

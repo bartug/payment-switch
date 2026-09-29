@@ -17,7 +17,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
@@ -28,10 +31,15 @@ import java.util.concurrent.ThreadLocalRandom;
 @Service
 public class BankSimulatorServiceImpl implements BankSimulatorService {
 
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Europe/Istanbul");
+
     private final Map<String, SimulatedTransaction> transactions = new ConcurrentHashMap<>();
     private final Map<BankCode, ChaosSettings> chaos = new ConcurrentHashMap<>();
-    // bank:orderId -> (refundId -> tutar)
-    private final Map<String, Map<String, Long>> refunds = new ConcurrentHashMap<>();
+    // bank:orderId -> (refundId -> iade)
+    private final Map<String, Map<String, SimulatedRefund>> refunds = new ConcurrentHashMap<>();
+
+    private record SimulatedRefund(long amount, Instant createdAt) {
+    }
 
     /**
      * <h1>Satış</h1>
@@ -92,7 +100,7 @@ public class BankSimulatorServiceImpl implements BankSimulatorService {
     public BankTransactionResponse reverse(@NotNull BankCode bankCode, @NotNull String orderId) {
         applyLatencyAndFailures(bankCode, getChaos(bankCode));
         SimulatedTransaction reversed = transactions.compute(key(bankCode, orderId), (k, existing) -> existing == null
-                ? new SimulatedTransaction(orderId, 0, "REVERSED", "00", null, null, "İşlem bulunamadı, sipariş numarası iptal edildi")
+                ? new SimulatedTransaction(orderId, 0, "TRY", "REVERSED", "00", null, null, "İşlem bulunamadı, sipariş numarası iptal edildi", Instant.now())
                 : existing.reversed());
         log.info("Bank reversal. bank={}, orderId={}", bankCode, orderId);
         return reversed.toResponse();
@@ -148,15 +156,15 @@ public class BankSimulatorServiceImpl implements BankSimulatorService {
         if (existing == null || !"APPROVED".equals(existing.status())) {
             return new BankTransactionResponse(orderId, "DECLINED", "12", null, null, "İade yapılabilecek onaylı işlem yok");
         }
-        Map<String, Long> orderRefunds = refunds.computeIfAbsent(key, k -> new ConcurrentHashMap<>());
+        Map<String, SimulatedRefund> orderRefunds = refunds.computeIfAbsent(key, k -> new ConcurrentHashMap<>());
         if (orderRefunds.containsKey(request.operationId())) {
             return new BankTransactionResponse(orderId, "REFUNDED", "00", null, existing.rrn(), "İade daha önce yapıldı");
         }
-        long refunded = orderRefunds.values().stream().mapToLong(Long::longValue).sum();
+        long refunded = orderRefunds.values().stream().mapToLong(SimulatedRefund::amount).sum();
         if (refunded + request.amount() > existing.amount()) {
             return new BankTransactionResponse(orderId, "DECLINED", "13", null, existing.rrn(), "İade tutarı satış tutarını aşıyor");
         }
-        orderRefunds.put(request.operationId(), request.amount());
+        orderRefunds.put(request.operationId(), new SimulatedRefund(request.amount(), Instant.now()));
         log.info("Bank refund. bank={}, orderId={}, refundId={}, amount={}", bankCode, orderId, request.operationId(), request.amount());
         return new BankTransactionResponse(orderId, "REFUNDED", "00", null, existing.rrn(), "İade edildi");
     }
@@ -174,6 +182,63 @@ public class BankSimulatorServiceImpl implements BankSimulatorService {
         if (getChaos(bankCode).down()) {
             throw new BankUnavailableException(bankCode + " kapalı");
         }
+    }
+
+    /**
+     * <h1>Gün Sonu Dosyası</h1>
+     * <p>O iş gününde onaylanan satışları ve yapılan iadeleri CSV olarak döndürür. İptal edilen (VOIDED) ve teknik
+     * iptal edilen (REVERSED) işlemler takasa girmediği için dosyada yer almaz.</p>
+     *
+     * @param bankCode     Banka
+     * @param businessDate İş günü (İstanbul saati)
+     * @return CSV
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-7
+     */
+    @Override
+    public String settlementFile(@NotNull BankCode bankCode, @NotNull LocalDate businessDate) {
+        StringBuilder csv = new StringBuilder("order_id,type,amount,currency,rrn,auth_code,operation_id,transaction_time\n");
+        String prefix = bankCode + ":";
+        transactions.forEach((key, tx) -> {
+            if (!key.startsWith(prefix) || !"APPROVED".equals(tx.status()) || !businessDate.equals(dateOf(tx.createdAt()))) {
+                return;
+            }
+            csv.append(String.join(",", tx.orderId(), "SALE", String.valueOf(tx.amount()), tx.currency(),
+                    tx.rrn(), tx.authCode(), "", tx.createdAt().toString())).append('\n');
+        });
+        refunds.forEach((key, orderRefunds) -> {
+            if (!key.startsWith(prefix)) {
+                return;
+            }
+            SimulatedTransaction tx = transactions.get(key);
+            orderRefunds.forEach((refundId, refund) -> {
+                if (businessDate.equals(dateOf(refund.createdAt()))) {
+                    csv.append(String.join(",", tx.orderId(), "REFUND", String.valueOf(refund.amount()), tx.currency(),
+                            tx.rrn(), "", refundId, refund.createdAt().toString())).append('\n');
+                }
+            });
+        });
+        return csv.toString();
+    }
+
+    /**
+     * <h1>Banka Kaydını Değiştirme</h1>
+     * <p>Sadece mutabakat senaryolarını denemek için: bankanın kaydındaki tutarı değiştirir.</p>
+     *
+     * @param bankCode Banka
+     * @param orderId  Sipariş numarası
+     * @param amount   Yeni tutar (kuruş)
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-7
+     */
+    @Override
+    public void tamperAmount(@NotNull BankCode bankCode, @NotNull String orderId, long amount) {
+        transactions.computeIfPresent(key(bankCode, orderId), (k, tx) -> tx.withAmount(amount));
+        log.warn("Chaos: transaction amount changed on bank side. bank={}, orderId={}, amount={}", bankCode, orderId, amount);
+    }
+
+    private static LocalDate dateOf(Instant instant) {
+        return instant.atZone(BUSINESS_ZONE).toLocalDate();
     }
 
     @Override
@@ -215,13 +280,14 @@ public class BankSimulatorServiceImpl implements BankSimulatorService {
             case 51 -> declined(request, "51", "Yetersiz bakiye");
             case 5 -> declined(request, "05", "İşlem onaylanmadı");
             case 54 -> declined(request, "54", "Kartın süresi dolmuş");
-            default -> new SimulatedTransaction(request.orderId(), request.amount(), "APPROVED", "00",
-                    digits(6), digits(12), "Onaylandı");
+            default -> new SimulatedTransaction(request.orderId(), request.amount(), request.currency(), "APPROVED", "00",
+                    digits(6), digits(12), "Onaylandı", Instant.now());
         };
     }
 
     private static SimulatedTransaction declined(BankAuthorizeRequest request, String code, String message) {
-        return new SimulatedTransaction(request.orderId(), request.amount(), "DECLINED", code, null, digits(12), message);
+        return new SimulatedTransaction(request.orderId(), request.amount(), request.currency(), "DECLINED", code, null,
+                digits(12), message, Instant.now());
     }
 
     private static String digits(int length) {

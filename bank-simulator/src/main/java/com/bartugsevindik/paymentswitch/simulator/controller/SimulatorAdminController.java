@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -52,6 +53,25 @@ public class SimulatorAdminController {
     @GetMapping("/chaos")
     public ResponseEntity<ResponseMessage> getAllChaos() {
         return ResponseEntity.ok(ResponseHelper.success("Chaos ayarları getirildi.", bankSimulatorService.getAllChaos()));
+    }
+
+    /**
+     * <h1>Banka Kaydının Tutarını Değiştir</h1>
+     * <p>Mutabakatta tutar farkı senaryosunu denemek için.</p>
+     *
+     * @param bankCode Banka
+     * @param orderId  Sipariş numarası
+     * @param amount   Yeni tutar (kuruş)
+     * @return Boş cevap
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-7
+     */
+    @Operation(summary = "Banka Kaydının Tutarını Değiştir", description = "Sadece test: mutabakatta AMOUNT_MISMATCH oluşturur.")
+    @PutMapping("/{bankCode}/transactions/{orderId}/amount")
+    public ResponseEntity<ResponseMessage> tamperAmount(@PathVariable BankCode bankCode, @PathVariable String orderId,
+                                                        @RequestParam long amount) {
+        bankSimulatorService.tamperAmount(bankCode, orderId, amount);
+        return ResponseEntity.ok(ResponseHelper.success("Banka kaydı değiştirildi.", null));
     }
 
     /**

@@ -5,6 +5,7 @@
 
 package com.bartugsevindik.paymentswitch.payment.operation.repository;
 
+import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import com.bartugsevindik.paymentswitch.common.enums.BankOperationType;
 import com.bartugsevindik.paymentswitch.payment.operation.entity.PaymentOperation;
 import com.bartugsevindik.paymentswitch.payment.operation.enums.PaymentOperationStatus;
@@ -13,6 +14,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,4 +39,22 @@ public interface PaymentOperationRepository extends JpaRepository<PaymentOperati
     @Query("SELECT COALESCE(SUM(o.amount), 0) FROM PaymentOperation o WHERE o.paymentId = :paymentId AND o.type = :type AND o.status = :status")
     long sumAmount(@Param("paymentId") String paymentId, @Param("type") BankOperationType type,
                    @Param("status") PaymentOperationStatus status);
+
+    /**
+     * Bankada sonuçlanmış iadeler (mutabakat için). İade tarihi olarak bankanın sonucunun geldiği zaman alınır.
+     *
+     * @param bankCode Banka
+     * @param from     Başlangıç (dahil)
+     * @param to       Bitiş (hariç)
+     * @return Başarılı iadeler
+     */
+    @Query("""
+            SELECT o FROM PaymentOperation o
+            WHERE o.type = com.bartugsevindik.paymentswitch.common.enums.BankOperationType.REFUND
+              AND o.status = com.bartugsevindik.paymentswitch.payment.operation.enums.PaymentOperationStatus.SUCCEEDED
+              AND o.updatedDate >= :from AND o.updatedDate < :to
+              AND o.paymentId IN (SELECT p.paymentId FROM Payment p WHERE p.bankCode = :bankCode)
+            """)
+    List<PaymentOperation> findSucceededRefunds(@Param("bankCode") BankCode bankCode, @Param("from") LocalDateTime from,
+                                                @Param("to") LocalDateTime to);
 }

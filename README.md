@@ -19,6 +19,7 @@ Terminal entegrasyonu: [docs/03-terminal-kimlik-dogrulama.md](docs/03-terminal-k
 Routing: [docs/04-routing.md](docs/04-routing.md) ·
 Banka entegrasyonu: [docs/05-banka-entegrasyonu.md](docs/05-banka-entegrasyonu.md) ·
 Webhook: [docs/06-webhook.md](docs/06-webhook.md) ·
+Ledger ve mutabakat: [docs/07-ledger-ve-mutabakat.md](docs/07-ledger-ve-mutabakat.md) ·
 Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
 
 ## 1. Geliştirme Ortamı
@@ -64,8 +65,8 @@ Swagger: [payment-api](http://localhost:8081/swagger-ui.html) · [routing-servic
 | PS-5 | Card vault, bank adapter, circuit breaker, inquiry ve reversal ([ADR-006](docs/adr/ADR-006-banka-entegrasyonu-ve-cevapsiz-islemler.md)) | ✅ |
 | PS-6 | Merchant webhook ([docs/06-webhook.md](docs/06-webhook.md)) | ✅ |
 | PS-6 | Void ve kısmi refund ([ADR-007](docs/adr/ADR-007-webhook-iptal-iade.md)) | ✅ |
-| PS-7 | Double-entry ledger, mutabakat | ⏳ |
-| PS-8 | Ölçekleme, OpenTelemetry, Gatling | |
+| PS-7 | Double-entry ledger, iki yönlü mutabakat ([ADR-008](docs/adr/ADR-008-ledger-ve-mutabakat.md)) | ✅ |
+| PS-8 | Ölçekleme, OpenTelemetry, Gatling | ⏳ |
 
 ## 4. Kod Kalitesi
 

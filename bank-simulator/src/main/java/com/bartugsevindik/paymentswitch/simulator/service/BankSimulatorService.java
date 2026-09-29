@@ -12,6 +12,7 @@ import com.bartugsevindik.paymentswitch.simulator.dto.BankTransactionResponse;
 import com.bartugsevindik.paymentswitch.simulator.dto.ChaosSettings;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 
@@ -95,6 +96,20 @@ public interface BankSimulatorService {
      * @since 28.09.2026 - PS-5
      */
     void echo(BankCode bankCode);
+
+    /**
+     * <h1>Gün Sonu Dosyası</h1>
+     * <p>O iş gününde onaylanan satışları ve yapılan iadeleri CSV olarak döndürür.</p>
+     *
+     * @param bankCode     Banka
+     * @param businessDate İş günü (İstanbul saati)
+     * @return CSV
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-7
+     */
+    String settlementFile(BankCode bankCode, LocalDate businessDate);
+
+    void tamperAmount(BankCode bankCode, String orderId, long amount);
 
     ChaosSettings getChaos(BankCode bankCode);
 

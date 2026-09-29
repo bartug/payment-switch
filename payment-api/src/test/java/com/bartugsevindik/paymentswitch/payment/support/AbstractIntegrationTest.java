@@ -37,7 +37,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * Container'lar tüm test sınıfları için bir kez açılır (singleton container pattern).
  * Her sınıfta yeniden açılsaydı Spring context cache'i de işe yaramazdı.
  */
-@SpringBootTest(properties = "application.scheduling.enabled=false")
+// Her farklı test konfigürasyonu ayrı bir Spring context (ve ayrı bağlantı havuzu) açar; havuz küçük tutulmazsa
+// context sayısı × havuz boyutu Postgres'in max_connections (100) sınırını aşar
+@SpringBootTest(properties = {"application.scheduling.enabled=false", "spring.datasource.hikari.maximum-pool-size=5"})
 @AutoConfigureMockMvc
 public abstract class AbstractIntegrationTest {
 
