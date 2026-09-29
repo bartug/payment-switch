@@ -18,6 +18,7 @@ Detaylı akış: [docs/02-odeme-akisi.md](docs/02-odeme-akisi.md) · Domain söz
 Terminal entegrasyonu: [docs/03-terminal-kimlik-dogrulama.md](docs/03-terminal-kimlik-dogrulama.md) ·
 Routing: [docs/04-routing.md](docs/04-routing.md) ·
 Banka entegrasyonu: [docs/05-banka-entegrasyonu.md](docs/05-banka-entegrasyonu.md) ·
+Webhook: [docs/06-webhook.md](docs/06-webhook.md) ·
 Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
 
 ## 1. Geliştirme Ortamı
@@ -61,7 +62,8 @@ Swagger: [payment-api](http://localhost:8081/swagger-ui.html) · [routing-servic
 | PS-3 | Transactional outbox, Kafka ([ADR-004](docs/adr/ADR-004-transactional-outbox.md)) | ✅ |
 | PS-4 | BIN tabanlı routing, kural zinciri, inbox, DLT ([ADR-005](docs/adr/ADR-005-routing-ve-consumer-tasarimi.md)) | ✅ |
 | PS-5 | Card vault, bank adapter, circuit breaker, inquiry ve reversal ([ADR-006](docs/adr/ADR-006-banka-entegrasyonu-ve-cevapsiz-islemler.md)) | ✅ |
-| PS-6 | Merchant webhook, void ve refund | ⏳ |
+| PS-6 | Merchant webhook ([docs/06-webhook.md](docs/06-webhook.md)) | ✅ |
+| PS-6 | Void ve refund | ⏳ |
 | PS-7 | Double-entry ledger, mutabakat | |
 | PS-8 | Ölçekleme, OpenTelemetry, Gatling | |
 

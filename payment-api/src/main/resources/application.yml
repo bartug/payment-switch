@@ -92,6 +92,11 @@ application:
   kafka:
     topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  webhook:
+    poll-interval: ${WEBHOOK_POLL_INTERVAL:1s}
+    connect-timeout: 2s
+    read-timeout: 5s
+    retry-schedule: 10s,30s,2m,10m,30m,1h,3h,6h
   card-vault:
     ttl: ${CARD_VAULT_TTL:15m}
     # Lokal geliştirme değerleri bilerek okunabilir: base64("LOCAL-DEV-ONLY-cardvault-key-001").

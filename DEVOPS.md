@@ -99,6 +99,7 @@ hangi bankaya gittiğini gösterir. Test kartları ve routing senaryoları: [doc
 | `BANK_CODES` | `QNB,YKB,GARANTI,ISBANK,AKBANK` | bank-adapter'ın işlem gönderdiği bankalar. Production'da banka başına deployment: `BANK_CODES=YKB` |
 | `BANK_API_URL` / `PAYMENT_API_URL` | `http://localhost:8090` / `http://localhost:8081` | |
 | `BANK_READ_TIMEOUT` | `5s` | Bu süre dolarsa işlem `UNKNOWN` olur |
+| `WEBHOOK_POLL_INTERVAL` | `1s` | Webhook dispatcher'ın bekleyen bildirimlere bakma aralığı |
 | `ROUTING_CONSUMER_CONCURRENCY` | `3` | routing-service consumer thread sayısı. Partition sayısından fazlası boşta kalır. |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
 

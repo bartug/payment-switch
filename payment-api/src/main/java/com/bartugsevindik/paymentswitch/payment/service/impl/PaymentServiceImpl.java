@@ -31,6 +31,7 @@ import com.bartugsevindik.paymentswitch.payment.service.PaymentService;
 import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalPrincipal;
 import com.bartugsevindik.paymentswitch.payment.vault.dto.CardData;
 import com.bartugsevindik.paymentswitch.payment.vault.service.CardVaultService;
+import com.bartugsevindik.paymentswitch.payment.webhook.service.WebhookService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -58,6 +59,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final OutboxService outboxService;
     private final InboxService inboxService;
     private final CardVaultService cardVaultService;
+    private final WebhookService webhookService;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -161,6 +163,7 @@ public class PaymentServiceImpl implements PaymentService {
         } else {
             payment.setFailureReason(result.description());
             payment.changeStatus(PaymentStatus.FAILED);
+            webhookService.enqueue(payment);
         }
         log.info("Routing result applied. paymentId={}, status={}, bank={}, reason={}",
                 payment.getPaymentId(), payment.getPaymentStatus(), result.bankCode(), result.reason());
@@ -207,6 +210,8 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setFailureReason(result.message());
         }
         payment.changeStatus(target);
+        // Aynı transaction: durum değişmeden bildirim gitmez, bildirim kaybolmaz
+        webhookService.enqueue(payment);
         log.info("Bank result applied. paymentId={}, status={}, bank={}, responseCode={}",
                 payment.getPaymentId(), target, result.bankCode(), result.responseCode());
     }
