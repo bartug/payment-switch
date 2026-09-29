@@ -92,6 +92,10 @@ application:
   kafka:
     topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  payment-operation:
+    # Bu saatten sonra o günün ödemeleri iptal edilemez, sadece iade edilebilir
+    business-day-cutoff: ${BUSINESS_DAY_CUTOFF:23:30}
+    business-zone: Europe/Istanbul
   webhook:
     poll-interval: ${WEBHOOK_POLL_INTERVAL:1s}
     connect-timeout: 2s

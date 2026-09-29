@@ -11,6 +11,7 @@ import com.bartugsevindik.paymentswitch.bank.dto.BankApiResponse;
 import com.bartugsevindik.paymentswitch.bank.dto.BankOutcome;
 import com.bartugsevindik.paymentswitch.bank.entity.BankTransaction;
 import com.bartugsevindik.paymentswitch.bank.enums.BankTransactionStatus;
+import com.bartugsevindik.paymentswitch.bank.service.BankOperationService;
 import com.bartugsevindik.paymentswitch.bank.service.BankTransactionService;
 import com.bartugsevindik.paymentswitch.bank.service.RecoveryService;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class RecoveryServiceImpl implements RecoveryService {
 
     private final BankTransactionService bankTransactionService;
     private final BankApiClient bankApiClient;
+    private final BankOperationService bankOperationService;
 
     /**
      * <h1>Recovery Turu</h1>
@@ -53,6 +55,7 @@ public class RecoveryServiceImpl implements RecoveryService {
                         transaction.getPaymentId(), transaction.getStatus(), e);
             }
         }
+        bankOperationService.retryDue();
     }
 
     private void inquire(BankTransaction transaction) {

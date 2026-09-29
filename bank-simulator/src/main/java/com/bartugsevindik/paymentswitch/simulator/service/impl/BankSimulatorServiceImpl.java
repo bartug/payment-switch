@@ -7,6 +7,7 @@ package com.bartugsevindik.paymentswitch.simulator.service.impl;
 
 import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import com.bartugsevindik.paymentswitch.simulator.dto.BankAuthorizeRequest;
+import com.bartugsevindik.paymentswitch.simulator.dto.BankOperationRequest;
 import com.bartugsevindik.paymentswitch.simulator.dto.BankTransactionResponse;
 import com.bartugsevindik.paymentswitch.simulator.dto.ChaosSettings;
 import com.bartugsevindik.paymentswitch.simulator.model.SimulatedTransaction;
@@ -29,6 +30,8 @@ public class BankSimulatorServiceImpl implements BankSimulatorService {
 
     private final Map<String, SimulatedTransaction> transactions = new ConcurrentHashMap<>();
     private final Map<BankCode, ChaosSettings> chaos = new ConcurrentHashMap<>();
+    // bank:orderId -> (refundId -> tutar)
+    private final Map<String, Map<String, Long>> refunds = new ConcurrentHashMap<>();
 
     /**
      * <h1>Satış</h1>
@@ -93,6 +96,69 @@ public class BankSimulatorServiceImpl implements BankSimulatorService {
                 : existing.reversed());
         log.info("Bank reversal. bank={}, orderId={}", bankCode, orderId);
         return reversed.toResponse();
+    }
+
+    /**
+     * <h1>İptal (Void)</h1>
+     * <p>Sadece onaylı ve iade yapılmamış işlem iptal edilebilir. Tekrar gelen istek aynı sonucu döner.</p>
+     *
+     * @param bankCode Banka
+     * @param orderId  Sipariş numarası
+     * @return İptal sonucu
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-6
+     */
+    @Override
+    public BankTransactionResponse voidTransaction(@NotNull BankCode bankCode, @NotNull String orderId) {
+        applyLatencyAndFailures(bankCode, getChaos(bankCode));
+        String key = key(bankCode, orderId);
+        SimulatedTransaction existing = transactions.get(key);
+        if (existing == null) {
+            return new BankTransactionResponse(orderId, "DECLINED", "12", null, null, "İşlem bulunamadı");
+        }
+        if ("VOIDED".equals(existing.status())) {
+            return existing.toResponse();
+        }
+        if (!"APPROVED".equals(existing.status()) || refunds.containsKey(key)) {
+            return new BankTransactionResponse(orderId, "DECLINED", "12", null, existing.rrn(), "İşlem iptal edilemez");
+        }
+        SimulatedTransaction voided = existing.withStatus("VOIDED", "İşlem iptal edildi");
+        transactions.put(key, voided);
+        log.info("Bank void. bank={}, orderId={}", bankCode, orderId);
+        return voided.toResponse();
+    }
+
+    /**
+     * <h1>İade (Refund)</h1>
+     * <p>Kısmi iade yapılabilir; toplam iade satış tutarını aşamaz. Aynı refundId ikinci kez iade oluşturmaz.</p>
+     *
+     * @param bankCode Banka
+     * @param orderId  Sipariş numarası
+     * @param request  İade isteği
+     * @return İade sonucu
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-6
+     */
+    @Override
+    public synchronized BankTransactionResponse refund(@NotNull BankCode bankCode, @NotNull String orderId,
+                                                       @NotNull BankOperationRequest request) {
+        applyLatencyAndFailures(bankCode, getChaos(bankCode));
+        String key = key(bankCode, orderId);
+        SimulatedTransaction existing = transactions.get(key);
+        if (existing == null || !"APPROVED".equals(existing.status())) {
+            return new BankTransactionResponse(orderId, "DECLINED", "12", null, null, "İade yapılabilecek onaylı işlem yok");
+        }
+        Map<String, Long> orderRefunds = refunds.computeIfAbsent(key, k -> new ConcurrentHashMap<>());
+        if (orderRefunds.containsKey(request.operationId())) {
+            return new BankTransactionResponse(orderId, "REFUNDED", "00", null, existing.rrn(), "İade daha önce yapıldı");
+        }
+        long refunded = orderRefunds.values().stream().mapToLong(Long::longValue).sum();
+        if (refunded + request.amount() > existing.amount()) {
+            return new BankTransactionResponse(orderId, "DECLINED", "13", null, existing.rrn(), "İade tutarı satış tutarını aşıyor");
+        }
+        orderRefunds.put(request.operationId(), request.amount());
+        log.info("Bank refund. bank={}, orderId={}, refundId={}, amount={}", bankCode, orderId, request.operationId(), request.amount());
+        return new BankTransactionResponse(orderId, "REFUNDED", "00", null, existing.rrn(), "İade edildi");
     }
 
     /**

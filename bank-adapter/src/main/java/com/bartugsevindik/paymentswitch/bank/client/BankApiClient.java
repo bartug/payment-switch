@@ -6,6 +6,7 @@
 package com.bartugsevindik.paymentswitch.bank.client;
 
 import com.bartugsevindik.paymentswitch.bank.dto.BankApiAuthorizeRequest;
+import com.bartugsevindik.paymentswitch.bank.dto.BankApiOperationRequest;
 import com.bartugsevindik.paymentswitch.bank.dto.BankApiResponse;
 import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import lombok.extern.slf4j.Slf4j;
@@ -70,6 +71,24 @@ public class BankApiClient {
     public BankApiResponse reverse(@NotNull BankCode bank, @NotNull String orderId) {
         return call(bank, "reversal", () -> restClient.post()
                 .uri("/banks/{bank}/v1/transactions/{orderId}/reversal", bank, orderId)
+                .retrieve()
+                .body(BankApiResponse.class));
+    }
+
+    public BankApiResponse voidTransaction(@NotNull BankCode bank, @NotNull String orderId, @NotNull String operationId) {
+        return call(bank, "void", () -> restClient.post()
+                .uri("/banks/{bank}/v1/transactions/{orderId}/void", bank, orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new BankApiOperationRequest(operationId, null))
+                .retrieve()
+                .body(BankApiResponse.class));
+    }
+
+    public BankApiResponse refund(@NotNull BankCode bank, @NotNull String orderId, @NotNull String operationId, long amount) {
+        return call(bank, "refund", () -> restClient.post()
+                .uri("/banks/{bank}/v1/transactions/{orderId}/refunds", bank, orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new BankApiOperationRequest(operationId, amount))
                 .retrieve()
                 .body(BankApiResponse.class));
     }

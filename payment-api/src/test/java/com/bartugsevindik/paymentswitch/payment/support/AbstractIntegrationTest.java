@@ -106,7 +106,15 @@ public abstract class AbstractIntegrationTest {
     }
 
     protected MockHttpServletRequestBuilder signedPost(TestTerminal terminal, String idempotencyKey, String body, long timestamp) {
-        String path = "/v1/payments";
+        return signedPostTo(terminal, "/v1/payments", idempotencyKey, body, timestamp);
+    }
+
+    protected MockHttpServletRequestBuilder signedPostTo(TestTerminal terminal, String path, String idempotencyKey, String body) {
+        return signedPostTo(terminal, path, idempotencyKey, body, Instant.now().getEpochSecond());
+    }
+
+    protected MockHttpServletRequestBuilder signedPostTo(TestTerminal terminal, String path, String idempotencyKey,
+                                                         String body, long timestamp) {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         String signature = RequestSigner.sign(terminal.secret(),
                 RequestSigner.stringToSign("POST", path, String.valueOf(timestamp), idempotencyKey, bytes));

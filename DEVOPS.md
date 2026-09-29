@@ -99,6 +99,7 @@ hangi bankaya gittiğini gösterir. Test kartları ve routing senaryoları: [doc
 | `BANK_CODES` | `QNB,YKB,GARANTI,ISBANK,AKBANK` | bank-adapter'ın işlem gönderdiği bankalar. Production'da banka başına deployment: `BANK_CODES=YKB` |
 | `BANK_API_URL` / `PAYMENT_API_URL` | `http://localhost:8090` / `http://localhost:8081` | |
 | `BANK_READ_TIMEOUT` | `5s` | Bu süre dolarsa işlem `UNKNOWN` olur |
+| `BUSINESS_DAY_CUTOFF` | `23:30` | Bu saatten sonra o günün ödemeleri iptal edilemez, sadece iade edilebilir (İstanbul saati) |
 | `WEBHOOK_POLL_INTERVAL` | `1s` | Webhook dispatcher'ın bekleyen bildirimlere bakma aralığı |
 | `ROUTING_CONSUMER_CONCURRENCY` | `3` | routing-service consumer thread sayısı. Partition sayısından fazlası boşta kalır. |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
@@ -161,6 +162,19 @@ curl -s -X PUT localhost:8090/v1/admin/banks/YKB/chaos -H 'Content-Type: applica
 ```
 
 Senaryolar ve beklenen sonuçlar: [docs/05-banka-entegrasyonu.md](docs/05-banka-entegrasyonu.md)
+
+### İptal ve iade
+
+```bash
+scripts/pos-request.sh POST /v1/payments/<paymentId>/refunds '{"amount":400.00}'
+scripts/pos-request.sh POST /v1/payments/<paymentId>/void ''
+scripts/pos-request.sh GET  /v1/payments/<paymentId>/operations
+```
+
+| Metrik | Alarm önerisi |
+|---|---|
+| `bank_operations_total{type,status}` | FAILED oranı artıyorsa |
+| `bank_operations_manual_review_total` | **> 0 ise incele**: iadenin bankada yapılıp yapılmadığı bilinmiyor |
 
 ### Routing
 

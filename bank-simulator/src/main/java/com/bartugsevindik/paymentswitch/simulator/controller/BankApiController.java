@@ -7,6 +7,7 @@ package com.bartugsevindik.paymentswitch.simulator.controller;
 
 import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import com.bartugsevindik.paymentswitch.simulator.dto.BankAuthorizeRequest;
+import com.bartugsevindik.paymentswitch.simulator.dto.BankOperationRequest;
 import com.bartugsevindik.paymentswitch.simulator.dto.BankTransactionResponse;
 import com.bartugsevindik.paymentswitch.simulator.service.BankSimulatorService;
 import com.bartugsevindik.paymentswitch.simulator.service.BankUnavailableException;
@@ -107,6 +108,48 @@ public class BankApiController {
     @PostMapping("/transactions/{orderId}/reversal")
     public ResponseEntity<BankTransactionResponse> reverse(@PathVariable BankCode bankCode, @PathVariable String orderId) {
         return ResponseEntity.ok(bankSimulatorService.reverse(bankCode, orderId));
+    }
+
+    /**
+     * <h1>İptal</h1>
+     * <p>Onaylı işlemi gün sonu öncesi iptal eder.</p>
+     *
+     * @param bankCode Banka
+     * @param orderId  Sipariş numarası
+     * @return İptal sonucu
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-6
+     */
+    @Operation(summary = "İptal (Void)", description = "Sadece onaylı ve iade yapılmamış işlem iptal edilebilir. İdempotent.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "İşlem sonuçlandı (VOIDED ya da DECLINED).",
+                    content = @Content(schema = @Schema(implementation = BankTransactionResponse.class)))
+    })
+    @PostMapping("/transactions/{orderId}/void")
+    public ResponseEntity<BankTransactionResponse> voidTransaction(@PathVariable BankCode bankCode, @PathVariable String orderId) {
+        return ResponseEntity.ok(bankSimulatorService.voidTransaction(bankCode, orderId));
+    }
+
+    /**
+     * <h1>İade</h1>
+     * <p>Onaylı işlemin tamamını ya da bir kısmını iade eder.</p>
+     *
+     * @param bankCode Banka
+     * @param orderId  Sipariş numarası
+     * @param request  İade isteği
+     * @return İade sonucu
+     * @author Bartuğ Sevindik <bartugsevindik@gmail.com>
+     * @since 29.09.2026 - PS-6
+     */
+    @Operation(summary = "İade (Refund)", description = "Kısmi iade yapılabilir, toplam iade satış tutarını aşamaz (13). Aynı operationId ikinci kez iade oluşturmaz.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "İşlem sonuçlandı (REFUNDED ya da DECLINED).",
+                    content = @Content(schema = @Schema(implementation = BankTransactionResponse.class)))
+    })
+    @PostMapping("/transactions/{orderId}/refunds")
+    public ResponseEntity<BankTransactionResponse> refund(@PathVariable BankCode bankCode, @PathVariable String orderId,
+                                                          @Valid @RequestBody BankOperationRequest request) {
+        return ResponseEntity.ok(bankSimulatorService.refund(bankCode, orderId, request));
     }
 
     /**

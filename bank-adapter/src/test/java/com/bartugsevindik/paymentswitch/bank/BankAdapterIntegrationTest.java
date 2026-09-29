@@ -5,9 +5,16 @@
 
 package com.bartugsevindik.paymentswitch.bank;
 
+import com.bartugsevindik.paymentswitch.bank.entity.BankOperation;
 import com.bartugsevindik.paymentswitch.bank.entity.BankTransaction;
+import com.bartugsevindik.paymentswitch.bank.enums.BankOperationStatus;
 import com.bartugsevindik.paymentswitch.bank.enums.BankTransactionStatus;
+import com.bartugsevindik.paymentswitch.bank.repository.BankOperationRepository;
 import com.bartugsevindik.paymentswitch.bank.repository.BankTransactionRepository;
+import com.bartugsevindik.paymentswitch.common.enums.BankOperationType;
+import com.bartugsevindik.paymentswitch.common.event.BankOperationRequestedEvent;
+import com.bartugsevindik.paymentswitch.common.event.BankOperationResultEvent;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.bartugsevindik.paymentswitch.bank.service.RecoveryService;
 import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import com.bartugsevindik.paymentswitch.common.enums.TerminalType;
@@ -268,6 +275,88 @@ class BankAdapterIntegrationTest {
 
     @Autowired
     private com.bartugsevindik.paymentswitch.bank.job.BankHealthProbeJob probeJob;
+
+    @Autowired
+    private BankOperationRepository bankOperationRepository;
+
+    @Test
+    void iptalBasariliOlur() throws Exception {
+        String paymentId = UUID.randomUUID().toString();
+        String operationId = UUID.randomUUID().toString();
+        wireMock.stubFor(post(urlPathEqualTo("/banks/YKB/v1/transactions/" + paymentId + "/void"))
+                .willReturn(okJson(operationResponse(paymentId, "VOIDED", "00"))));
+
+        publishOperation(operationId, paymentId, BankOperationType.VOID, 125050);
+
+        assertThat(awaitOperation(operationId, BankOperationStatus.SUCCEEDED).getAttempts()).isEqualTo(1);
+        outboxRelay.publishPending();
+        JsonNode result = objectMapper.readTree(consumeByKey(BankOperationResultEvent.TOPIC, paymentId).value());
+        assertThat(result.get("type").asText()).isEqualTo("VOID");
+        assertThat(result.get("status").asText()).isEqualTo("SUCCEEDED");
+    }
+
+    @Test
+    void cevapsizKalanIadeAyniOperationIdIleTekrarDenenir() {
+        String paymentId = UUID.randomUUID().toString();
+        String operationId = UUID.randomUUID().toString();
+        String url = "/banks/YKB/v1/transactions/" + paymentId + "/refunds";
+        // İlk deneme timeout, ikinci deneme başarılı
+        wireMock.stubFor(post(urlPathEqualTo(url)).inScenario(operationId).whenScenarioStateIs(Scenario.STARTED)
+                .willReturn(okJson(operationResponse(paymentId, "REFUNDED", "00")).withFixedDelay(2500))
+                .willSetStateTo("second"));
+        wireMock.stubFor(post(urlPathEqualTo(url)).inScenario(operationId).whenScenarioStateIs("second")
+                .willReturn(okJson(operationResponse(paymentId, "REFUNDED", "00"))));
+
+        publishOperation(operationId, paymentId, BankOperationType.REFUND, 50000);
+        await().atMost(Duration.ofSeconds(15)).until(() -> bankOperationRepository.findByOperationId(operationId)
+                .map(op -> op.getAttempts() == 1 && op.getNextAttemptAt() != null).orElse(false));
+
+        recoveryService.runOnce();
+
+        assertThat(bankOperationRepository.findByOperationId(operationId).orElseThrow().getStatus())
+                .isEqualTo(BankOperationStatus.SUCCEEDED);
+        // Satıştan farklı: iade retry edildi, iki istek de aynı operationId ile
+        wireMock.verify(2, postRequestedFor(urlPathEqualTo(url))
+                .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.containing(operationId)));
+    }
+
+    @Test
+    void bankaIadeyiReddederseFailedOlur() {
+        String paymentId = UUID.randomUUID().toString();
+        String operationId = UUID.randomUUID().toString();
+        wireMock.stubFor(post(urlPathEqualTo("/banks/YKB/v1/transactions/" + paymentId + "/refunds"))
+                .willReturn(okJson(operationResponse(paymentId, "DECLINED", "13"))));
+
+        publishOperation(operationId, paymentId, BankOperationType.REFUND, 999999);
+
+        assertThat(awaitOperation(operationId, BankOperationStatus.FAILED).getResponseCode()).isEqualTo("13");
+    }
+
+    private void publishOperation(String operationId, String paymentId, BankOperationType type, long amount) {
+        BankOperationRequestedEvent event = new BankOperationRequestedEvent(operationId, paymentId, BankCode.YKB, type,
+                amount, "TRY", Instant.now());
+        try {
+            ProducerRecord<String, String> record = new ProducerRecord<>(BankCode.YKB.requestTopic(), paymentId,
+                    objectMapper.writeValueAsString(event));
+            record.headers().add(MessageHeaders.EVENT_ID, UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8));
+            record.headers().add(MessageHeaders.EVENT_TYPE, "BankOperationRequestedEvent".getBytes(StandardCharsets.UTF_8));
+            kafkaTemplate.send(record).get();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private BankOperation awaitOperation(String operationId, BankOperationStatus status) {
+        return await().atMost(Duration.ofSeconds(20)).until(
+                () -> bankOperationRepository.findByOperationId(operationId).orElse(null),
+                op -> op != null && op.getStatus() == status);
+    }
+
+    private static String operationResponse(String orderId, String status, String code) {
+        return """
+                {"orderId": "%s", "status": "%s", "responseCode": "%s", "message": "test"}
+                """.formatted(orderId, status, code);
+    }
 
     private void publish(String paymentId, BankCode bank) {
         BankAuthorizationRequestedEvent event = new BankAuthorizationRequestedEvent(paymentId, "MRC0000001", "TRM00000001",

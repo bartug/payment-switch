@@ -17,6 +17,10 @@ public record SimulatedTransaction(String orderId, long amount, String status, S
         return new BankTransactionResponse(orderId, status, responseCode, authCode, rrn, message);
     }
 
+    public SimulatedTransaction withStatus(String newStatus, String newMessage) {
+        return new SimulatedTransaction(orderId, amount, newStatus, responseCode, authCode, rrn, newMessage);
+    }
+
     public SimulatedTransaction reversed() {
         return new SimulatedTransaction(orderId, amount, "REVERSED", responseCode, authCode, rrn, "İşlem iptal edildi");
     }

@@ -26,7 +26,10 @@ public enum WebhookEventType {
     PAYMENT_APPROVED("payment.approved", PaymentStatus.APPROVED),
     PAYMENT_DECLINED("payment.declined", PaymentStatus.DECLINED),
     PAYMENT_FAILED("payment.failed", PaymentStatus.FAILED),
-    PAYMENT_REVERSED("payment.reversed", PaymentStatus.REVERSED);
+    PAYMENT_REVERSED("payment.reversed", PaymentStatus.REVERSED),
+    PAYMENT_VOIDED("payment.voided", PaymentStatus.VOIDED),
+    PAYMENT_PARTIALLY_REFUNDED("payment.partially_refunded", PaymentStatus.PARTIALLY_REFUNDED),
+    PAYMENT_REFUNDED("payment.refunded", PaymentStatus.REFUNDED);
 
     private final String value;
     private final PaymentStatus paymentStatus;

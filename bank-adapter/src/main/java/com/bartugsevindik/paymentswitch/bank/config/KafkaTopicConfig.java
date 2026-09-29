@@ -8,6 +8,7 @@ package com.bartugsevindik.paymentswitch.bank.config;
 import com.bartugsevindik.paymentswitch.common.enums.BankCode;
 import com.bartugsevindik.paymentswitch.common.event.BankAuthorizationResultEvent;
 import com.bartugsevindik.paymentswitch.common.event.BankHealthChangedEvent;
+import com.bartugsevindik.paymentswitch.common.event.BankOperationResultEvent;
 import com.bartugsevindik.paymentswitch.messaging.config.MessagingAutoConfiguration;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,7 @@ public class KafkaTopicConfig {
                     .partitions(partitions).replicas(replicas).build());
         }
         topics.add(TopicBuilder.name(BankAuthorizationResultEvent.TOPIC).partitions(partitions).replicas(replicas).build());
+        topics.add(TopicBuilder.name(BankOperationResultEvent.TOPIC).partitions(partitions).replicas(replicas).build());
         topics.add(TopicBuilder.name(BankHealthChangedEvent.TOPIC).partitions(1).replicas(replicas).build());
         return new KafkaAdmin.NewTopics(topics.toArray(NewTopic[]::new));
     }

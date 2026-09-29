@@ -6,6 +6,7 @@
 package com.bartugsevindik.paymentswitch.payment.config;
 
 import com.bartugsevindik.paymentswitch.common.event.BankAuthorizationResultEvent;
+import com.bartugsevindik.paymentswitch.common.event.BankOperationResultEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRequestedEvent;
 import com.bartugsevindik.paymentswitch.common.event.PaymentRoutingResultEvent;
 import com.bartugsevindik.paymentswitch.messaging.config.MessagingAutoConfiguration;
@@ -31,7 +32,9 @@ public class KafkaTopicConfig {
                 topic(PaymentRoutingResultEvent.TOPIC, partitions, replicas),
                 topic(PaymentRoutingResultEvent.TOPIC + MessagingAutoConfiguration.DLT_SUFFIX, partitions, replicas),
                 topic(BankAuthorizationResultEvent.TOPIC, partitions, replicas),
-                topic(BankAuthorizationResultEvent.TOPIC + MessagingAutoConfiguration.DLT_SUFFIX, partitions, replicas));
+                topic(BankAuthorizationResultEvent.TOPIC + MessagingAutoConfiguration.DLT_SUFFIX, partitions, replicas),
+                topic(BankOperationResultEvent.TOPIC, partitions, replicas),
+                topic(BankOperationResultEvent.TOPIC + MessagingAutoConfiguration.DLT_SUFFIX, partitions, replicas));
     }
 
     private static NewTopic topic(String name, int partitions, short replicas) {

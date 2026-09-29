@@ -97,6 +97,58 @@ class BankApiControllerTest {
         mockMvc.perform(get("/banks/QNB/v1/echo")).andExpect(status().isOk());
     }
 
+    @Test
+    void kismiIadeYapilirToplamSatisiAsamaz() throws Exception {
+        String orderId = UUID.randomUUID().toString();
+        authorize(orderId, 100000);
+
+        refund(orderId, "R1", 60000).andExpect(jsonPath("$.status").value("REFUNDED"));
+        refund(orderId, "R2", 50000)
+                .andExpect(jsonPath("$.status").value("DECLINED"))
+                .andExpect(jsonPath("$.responseCode").value("13"));
+        refund(orderId, "R3", 40000).andExpect(jsonPath("$.status").value("REFUNDED"));
+    }
+
+    @Test
+    void ayniRefundIdIkinciKezIadeOlusturmaz() throws Exception {
+        String orderId = UUID.randomUUID().toString();
+        authorize(orderId, 100000);
+
+        refund(orderId, "R1", 100000).andExpect(jsonPath("$.status").value("REFUNDED"));
+        // Adapter timeout sonrası aynı refundId ile tekrar denedi; toplam aşılmış sayılmamalı
+        refund(orderId, "R1", 100000)
+                .andExpect(jsonPath("$.status").value("REFUNDED"))
+                .andExpect(jsonPath("$.message").value("İade daha önce yapıldı"));
+    }
+
+    @Test
+    void iadeYapilmisIslemIptalEdilemez() throws Exception {
+        String orderId = UUID.randomUUID().toString();
+        authorize(orderId, 100000);
+        refund(orderId, "R1", 10000);
+
+        mockMvc.perform(post("/banks/YKB/v1/transactions/{orderId}/void", orderId))
+                .andExpect(jsonPath("$.status").value("DECLINED"))
+                .andExpect(jsonPath("$.responseCode").value("12"));
+    }
+
+    @Test
+    void onayliIslemIptalEdilirTekrarAyniSonucuDoner() throws Exception {
+        String orderId = UUID.randomUUID().toString();
+        authorize(orderId, 100000);
+
+        mockMvc.perform(post("/banks/YKB/v1/transactions/{orderId}/void", orderId))
+                .andExpect(jsonPath("$.status").value("VOIDED"));
+        mockMvc.perform(post("/banks/YKB/v1/transactions/{orderId}/void", orderId))
+                .andExpect(jsonPath("$.status").value("VOIDED"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions refund(String orderId, String refundId, long amount) throws Exception {
+        return mockMvc.perform(post("/banks/YKB/v1/transactions/{orderId}/refunds", orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"operationId\": \"%s\", \"amount\": %d}".formatted(refundId, amount)));
+    }
+
     private org.springframework.test.web.servlet.ResultActions authorize(String orderId, long amount) throws Exception {
         return mockMvc.perform(post("/banks/YKB/v1/authorize")
                 .contentType(MediaType.APPLICATION_JSON)

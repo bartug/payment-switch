@@ -62,6 +62,9 @@ public class PaymentDTO {
     @Schema(description = "Banka cevap kodu", example = "00")
     private String responseCode;
 
+    @Schema(description = "İade edilen toplam tutar", example = "500.00")
+    private BigDecimal refundedAmount;
+
     @Schema(description = "Ödeme bankaya gönderilemediyse sebebi", example = "Banka kartı ve ön ödemeli kartlarla taksitli işlem yapılamaz.")
     private String failureReason;
 

@@ -18,6 +18,7 @@ import org.mapstruct.ReportingPolicy;
 public interface PaymentMapper {
 
     @Mapping(target = "amount", expression = "java(entity.getMoney().toDecimal())")
+    @Mapping(target = "refundedAmount", expression = "java(Money.ofMinor(entity.getRefundedAmount(), entity.getCurrency()).toDecimal())")
     @Mapping(target = "maskedCardNumber", expression = "java(maskCardNumber(entity.getCardBin(), entity.getCardLast4()))")
     PaymentDTO toDto(Payment entity);
 
@@ -27,6 +28,7 @@ public interface PaymentMapper {
     @Mapping(target = "merchantId", ignore = true)
     @Mapping(target = "terminalId", ignore = true)
     @Mapping(target = "terminalType", ignore = true)
+    @Mapping(target = "refundedAmount", ignore = true)
     @Mapping(target = "amount", expression = "java(Money.of(request.getAmount(), request.getCurrency()).amount())")
     @Mapping(target = "cardBin", source = "cardNumber", qualifiedByName = "extractBin")
     @Mapping(target = "cardLast4", source = "cardNumber", qualifiedByName = "extractLast4")

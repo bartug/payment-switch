@@ -28,7 +28,9 @@ public enum PaymentStatus {
     DECLINED,
     UNKNOWN,
     REVERSED,
+    VOIDING,
     VOIDED,
+    PARTIALLY_REFUNDED,
     REFUNDED,
     FAILED;
 
@@ -36,7 +38,10 @@ public enum PaymentStatus {
             PENDING, EnumSet.of(ROUTED, FAILED, APPROVED, DECLINED, UNKNOWN),
             ROUTED, EnumSet.of(APPROVED, DECLINED, UNKNOWN, FAILED),
             UNKNOWN, EnumSet.of(APPROVED, DECLINED, REVERSED),
-            APPROVED, EnumSet.of(VOIDED, REFUNDED)
+            APPROVED, EnumSet.of(VOIDING, PARTIALLY_REFUNDED, REFUNDED),
+            // Banka iptali reddederse ödeme onaylı haline döner
+            VOIDING, EnumSet.of(VOIDED, APPROVED),
+            PARTIALLY_REFUNDED, EnumSet.of(PARTIALLY_REFUNDED, REFUNDED)
     );
 
     public boolean canTransitionTo(PaymentStatus target) {
