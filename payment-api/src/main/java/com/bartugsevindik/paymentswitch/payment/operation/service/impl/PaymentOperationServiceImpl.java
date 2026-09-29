@@ -21,6 +21,7 @@ import com.bartugsevindik.paymentswitch.payment.enums.PaymentStatus;
 import com.bartugsevindik.paymentswitch.payment.idempotency.dto.IdempotencyContext;
 import com.bartugsevindik.paymentswitch.payment.idempotency.dto.IdempotentResult;
 import com.bartugsevindik.paymentswitch.payment.idempotency.service.IdempotencyService;
+import com.bartugsevindik.paymentswitch.payment.ledger.service.LedgerService;
 import com.bartugsevindik.paymentswitch.payment.operation.config.PaymentOperationProperties;
 import com.bartugsevindik.paymentswitch.payment.operation.dto.PaymentOperationDTO;
 import com.bartugsevindik.paymentswitch.payment.operation.dto.RefundRequest;
@@ -63,6 +64,7 @@ public class PaymentOperationServiceImpl implements PaymentOperationService {
     private final OutboxService outboxService;
     private final InboxService inboxService;
     private final WebhookService webhookService;
+    private final LedgerService ledgerService;
     private final PaymentOperationProperties properties;
     private final TransactionTemplate transactionTemplate;
 
@@ -157,7 +159,11 @@ public class PaymentOperationServiceImpl implements PaymentOperationService {
 
         if (operation.getType() == BankOperationType.VOID) {
             payment.changeStatus(succeeded ? PaymentStatus.VOIDED : PaymentStatus.APPROVED);
+            if (succeeded) {
+                ledgerService.postVoid(payment, operation.getOperationId());
+            }
         } else if (succeeded) {
+            ledgerService.postRefund(payment, operation.getOperationId(), operation.getAmount());
             payment.setRefundedAmount(payment.getRefundedAmount() + operation.getAmount());
             payment.changeStatus(payment.getRefundedAmount().equals(payment.getAmount())
                     ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED);

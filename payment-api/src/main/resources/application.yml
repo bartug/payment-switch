@@ -92,6 +92,9 @@ application:
   kafka:
     topic-partitions: ${KAFKA_TOPIC_PARTITIONS:6}
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  ledger:
+    # Üye işyeri tanımlı değilse uygulanan komisyon (baz puan)
+    default-commission-rate-bps: 249
   payment-operation:
     # Bu saatten sonra o günün ödemeleri iptal edilemez, sadece iade edilebilir
     business-day-cutoff: ${BUSINESS_DAY_CUTOFF:23:30}

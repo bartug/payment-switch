@@ -9,6 +9,7 @@ import com.bartugsevindik.paymentswitch.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -45,4 +46,11 @@ public class Merchant extends BaseEntity {
     @ToString.Exclude
     @Column(name = "webhook_secret_ciphertext")
     private String webhookSecretCiphertext;
+
+    /**
+     * Satış tutarından kesilen komisyon (baz puan, 249 = %2,49).
+     */
+    @Column(name = "commission_rate_bps", nullable = false)
+    @Builder.Default
+    private Integer commissionRateBps = 249;
 }

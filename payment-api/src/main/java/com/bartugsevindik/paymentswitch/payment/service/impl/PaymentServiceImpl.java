@@ -24,6 +24,7 @@ import com.bartugsevindik.paymentswitch.payment.idempotency.exception.Idempotenc
 import com.bartugsevindik.paymentswitch.payment.idempotency.lock.IdempotencyLock;
 import com.bartugsevindik.paymentswitch.payment.idempotency.lock.LockResult;
 import com.bartugsevindik.paymentswitch.payment.idempotency.service.IdempotencyService;
+import com.bartugsevindik.paymentswitch.payment.ledger.service.LedgerService;
 import com.bartugsevindik.paymentswitch.payment.mapper.PaymentMapper;
 import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxService;
 import com.bartugsevindik.paymentswitch.payment.repository.PaymentRepository;
@@ -60,6 +61,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final InboxService inboxService;
     private final CardVaultService cardVaultService;
     private final WebhookService webhookService;
+    private final LedgerService ledgerService;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -210,6 +212,9 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setFailureReason(result.message());
         }
         payment.changeStatus(target);
+        if (target == PaymentStatus.APPROVED) {
+            ledgerService.postSale(payment);
+        }
         // Aynı transaction: durum değişmeden bildirim gitmez, bildirim kaybolmaz
         webhookService.enqueue(payment);
         log.info("Bank result applied. paymentId={}, status={}, bank={}, responseCode={}",
