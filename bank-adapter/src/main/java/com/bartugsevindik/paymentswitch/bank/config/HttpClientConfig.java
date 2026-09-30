@@ -20,17 +20,21 @@ public class HttpClientConfig {
      * Connect ve read timeout ayrı tutulur: bağlantı kurulamadıysa istek bankaya hiç ulaşmamıştır (güvenle FAILED),
      * cevap gelmediyse banka işlemi yapmış olabilir (UNKNOWN).
      */
+    /**
+     * Boot'un {@code RestClient.Builder}'ı observation ile gelir: her banka çağrısı trace'te span olur, traceparent
+     * header'ı eklenir ve {@code http.client.requests} metriği üretilir.
+     */
     @Bean
-    public RestClient bankRestClient(BankAdapterProperties properties) {
-        return RestClient.builder()
+    public RestClient bankRestClient(RestClient.Builder builder, BankAdapterProperties properties) {
+        return builder.clone()
                 .baseUrl(properties.getBankApiUrl())
                 .requestFactory(requestFactory(properties.getConnectTimeout(), properties.getReadTimeout()))
                 .build();
     }
 
     @Bean
-    public RestClient paymentApiRestClient(BankAdapterProperties properties) {
-        return RestClient.builder()
+    public RestClient paymentApiRestClient(RestClient.Builder builder, BankAdapterProperties properties) {
+        return builder.clone()
                 .baseUrl(properties.getPaymentApiUrl())
                 .requestFactory(requestFactory(properties.getConnectTimeout(), Duration.ofSeconds(3)))
                 .build();

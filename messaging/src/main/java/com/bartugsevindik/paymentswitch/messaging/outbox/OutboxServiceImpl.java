@@ -7,10 +7,13 @@ package com.bartugsevindik.paymentswitch.messaging.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -21,6 +24,11 @@ public class OutboxServiceImpl implements OutboxService {
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxProperties properties;
     private final ObjectMapper objectMapper;
+    /**
+     * Tracing kapalıysa null olabilir.
+     */
+    private final Tracer tracer;
+    private final OutboxRelayTrigger relayTrigger;
 
     /**
      * <h1>Event Kaydetme</h1>
@@ -47,8 +55,16 @@ public class OutboxServiceImpl implements OutboxService {
                 .topic(topic)
                 .messageKey(aggregateId)
                 .payload(toJson(event))
+                .traceParent(TraceParent.capture(tracer))
                 .attempts(0)
                 .build());
+        // Commit'ten önce tetiklenirse relay satırı henüz göremez; rollback olursa gönderilecek bir şey yoktur
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                relayTrigger.wakeUp();
+            }
+        });
         return eventId;
     }
 

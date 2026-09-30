@@ -33,6 +33,8 @@ import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalPrinci
 import com.bartugsevindik.paymentswitch.payment.vault.dto.CardData;
 import com.bartugsevindik.paymentswitch.payment.vault.service.CardVaultService;
 import com.bartugsevindik.paymentswitch.payment.webhook.service.WebhookService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -41,7 +43,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -62,6 +66,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final CardVaultService cardVaultService;
     private final WebhookService webhookService;
     private final LedgerService ledgerService;
+    private final MeterRegistry meterRegistry;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -215,10 +220,30 @@ public class PaymentServiceImpl implements PaymentService {
         if (target == PaymentStatus.APPROVED) {
             ledgerService.postSale(payment);
         }
+        recordEndToEnd(payment);
         // Aynı transaction: durum değişmeden bildirim gitmez, bildirim kaybolmaz
         webhookService.enqueue(payment);
         log.info("Bank result applied. paymentId={}, status={}, bank={}, responseCode={}",
                 payment.getPaymentId(), target, result.bankCode(), result.responseCode());
+    }
+
+    /**
+     * POS'un isteği ile ödemenin sonuçlanması arasındaki süre. API'nin cevap süresi (202) değil, kullanıcının asıl
+     * beklediği süre budur; SLO bu metriğe kurulur. UNKNOWN ara bir durum olduğu için ölçülmez.
+     */
+    private void recordEndToEnd(Payment payment) {
+        if (payment.getPaymentStatus() == PaymentStatus.UNKNOWN || payment.getCreatedDate() == null) {
+            return;
+        }
+        Timer.builder("payment.end_to_end")
+                .description("Ödeme isteğinden banka sonucuna kadar geçen süre")
+                .tag("bank", String.valueOf(payment.getBankCode()))
+                .tag("status", payment.getPaymentStatus().name())
+                .publishPercentileHistogram()
+                // Varsayılan üst sınır 30 sn; yük altında birikme varken gerçek süre görünmez, 30 sn'de kesilir
+                .maximumExpectedValue(Duration.ofMinutes(5))
+                .register(meterRegistry)
+                .record(Duration.between(payment.getCreatedDate(), LocalDateTime.now()));
     }
 
     private static PaymentStatus toPaymentStatus(BankResultStatus status) {

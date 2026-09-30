@@ -71,6 +71,8 @@ import static org.awaitility.Awaitility.await;
  */
 @SpringBootTest(properties = {
         "application.scheduling.enabled=false",
+        "management.otlp.tracing.export.enabled=false",
+        "application.outbox.wake-up-on-commit=false",
         "application.bank-adapter.banks=YKB,QNB",
         "application.bank-adapter.read-timeout=1s",
         "application.bank-adapter.recovery.inquiry-initial-delay=0s",

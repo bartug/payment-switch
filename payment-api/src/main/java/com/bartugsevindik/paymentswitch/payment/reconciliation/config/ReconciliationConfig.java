@@ -21,13 +21,13 @@ import java.time.Duration;
 public class ReconciliationConfig {
 
     @Bean
-    public RestClient settlementFileRestClient(ReconciliationProperties properties) {
+    public RestClient settlementFileRestClient(RestClient.Builder builder, ReconciliationProperties properties) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(3))
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(30));
-        return RestClient.builder().baseUrl(properties.getBankFileBaseUrl()).requestFactory(factory).build();
+        return builder.clone().baseUrl(properties.getBankFileBaseUrl()).requestFactory(factory).build();
     }
 }

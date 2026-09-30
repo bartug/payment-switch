@@ -17,6 +17,17 @@ management:
     health:
       probes:
         enabled: true
+  tracing:
+    sampling:
+      # Lokalde her istek izlenir; production'da %1-10 yeterli (TRACING_SAMPLING=0.05)
+      probability: ${TRACING_SAMPLING:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 springdoc:
   api-docs:

@@ -15,6 +15,7 @@ import com.bartugsevindik.paymentswitch.payment.terminal.security.TerminalAuthen
 import com.bartugsevindik.paymentswitch.payment.terminal.service.TerminalService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -39,8 +40,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  */
 // Her farklı test konfigürasyonu ayrı bir Spring context (ve ayrı bağlantı havuzu) açar; havuz küçük tutulmazsa
 // context sayısı × havuz boyutu Postgres'in max_connections (100) sınırını aşar
-@SpringBootTest(properties = {"application.scheduling.enabled=false", "spring.datasource.hikari.maximum-pool-size=5"})
+@SpringBootTest(properties = {"application.scheduling.enabled=false", "spring.datasource.hikari.maximum-pool-size=5",
+        "management.otlp.tracing.export.enabled=false", "application.outbox.wake-up-on-commit=false"})
 @AutoConfigureMockMvc
+// Boot testlerde tracing'i varsayılan olarak kapatır; trace'in outbox ve Kafka üzerinden taşınması test edildiği için açık
+@AutoConfigureObservability(metrics = false)
 public abstract class AbstractIntegrationTest {
 
     @ServiceConnection

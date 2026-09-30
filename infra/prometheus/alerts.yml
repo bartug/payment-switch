@@ -1,0 +1,44 @@
+# Ödeme sistemine özgü alarmlar. Eşikler lokal demo içindir; production'da trafiğe göre ayarlanmalı.
+groups:
+  - name: payment-switch
+    rules:
+      - alert: OutboxLagHigh
+        expr: max(outbox_oldest_pending_seconds) > 30
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Outbox 30 sn'den uzun süredir Kafka'ya yazamıyor; ödemeler bankaya gitmiyor"
+
+      - alert: BankCircuitOpen
+        # resilience4j: state etiketi değeri 1 olan durum aktif durumdur
+        expr: max by (name) (resilience4j_circuitbreaker_state{state="open"}) == 1
+        for: 30s
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.name }} circuit açık; routing bankayı devre dışı bıraktı"
+
+      - alert: PaymentEndToEndSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(payment_end_to_end_seconds_bucket[5m]))) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Ödemelerin %1'i 10 sn'den uzun sürede sonuçlanıyor"
+
+      - alert: BankUnknownRateHigh
+        expr: sum(rate(bank_transactions_total{status="UNKNOWN"}[5m])) / sum(rate(bank_transactions_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Banka işlemlerinin %5'inden fazlası cevapsız kalıyor"
+
+      - alert: ManualReviewRequired
+        expr: sum(increase(bank_transactions_manual_review_total[1h])) + sum(increase(bank_operations_manual_review_total[1h])) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "Reversal / iade tekrar denemeleri bitti; bankayla teyit gerekiyor"
+
+      - alert: ReconciliationStatusMismatch
+        expr: sum(increase(reconciliation_items_total{result=~"STATUS_MISMATCH|MISSING_IN_OURS"}[1d])) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "Mutabakatta kart sahibinden çekilmiş ama bizde başarılı görünmeyen işlem var"

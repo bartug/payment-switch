@@ -47,4 +47,9 @@ public class OutboxProperties {
     private Duration retention = Duration.ofDays(7);
 
     private int cleanupBatchSize = 1000;
+
+    /**
+     * Commit sonrası relay'i beklemeden çalıştır. Testlerde kapatılır; relay elle tetiklenir.
+     */
+    private boolean wakeUpOnCommit = true;
 }

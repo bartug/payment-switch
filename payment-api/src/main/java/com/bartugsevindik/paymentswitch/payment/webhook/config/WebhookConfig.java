@@ -21,7 +21,7 @@ public class WebhookConfig {
      * Yönlendirmeler takip edilmez: üye işyerinin adresi başka bir yere (örn. iç ağa) yönlendirirse bildirim oraya gitmesin.
      */
     @Bean
-    public RestClient webhookRestClient(WebhookProperties properties) {
+    public RestClient webhookRestClient(RestClient.Builder builder, WebhookProperties properties) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(properties.getConnectTimeout())
@@ -29,6 +29,6 @@ public class WebhookConfig {
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(properties.getReadTimeout());
-        return RestClient.builder().requestFactory(factory).build();
+        return builder.clone().requestFactory(factory).build();
     }
 }

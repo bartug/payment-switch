@@ -6,6 +6,8 @@
 package com.bartugsevindik.paymentswitch.messaging.outbox;
 
 import com.bartugsevindik.paymentswitch.messaging.MessageHeaders;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -42,6 +44,10 @@ public class OutboxRelay {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final TransactionTemplate transactionTemplate;
     private final OutboxProperties properties;
+    /**
+     * Tracing kapalıysa null olabilir.
+     */
+    private final Tracer tracer;
 
     @Scheduled(fixedDelayString = "${application.outbox.poll-interval:200ms}")
     public void publishPending() {
@@ -106,11 +112,23 @@ public class OutboxRelay {
         record.headers()
                 .add(MessageHeaders.EVENT_ID, event.getEventId().getBytes(StandardCharsets.UTF_8))
                 .add(MessageHeaders.EVENT_TYPE, event.getEventType().getBytes(StandardCharsets.UTF_8));
-        try {
+        // Event yazıldığı andaki trace'e bağlı bir span açılır; KafkaTemplate'in producer span'ı ve traceparent
+        // header'ı bu span'ın altında oluşur, consumer tarafında aynı trace devam eder
+        Span span = TraceParent.restore(tracer, event.getTraceParent())
+                .map(parent -> tracer.spanBuilder().setParent(parent).name("outbox publish " + event.getTopic())
+                        .tag("outbox.event_type", event.getEventType())
+                        .tag("outbox.attempts", String.valueOf(event.getAttempts()))
+                        .start())
+                .orElse(null);
+        try (Tracer.SpanInScope ignored = span == null ? null : tracer.withSpan(span)) {
             return kafkaTemplate.send(record);
         } catch (RuntimeException e) {
             // Metadata alınamazsa send() future dönmeden exception fırlatabilir (max.block.ms)
             return CompletableFuture.failedFuture(e);
+        } finally {
+            if (span != null) {
+                span.end();
+            }
         }
     }
 }

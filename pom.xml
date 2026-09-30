@@ -96,6 +96,16 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <!-- Yük testi varsayılan build'e girmez: ./mvnw -Pload-test -pl load-test gatling:test -->
+        <profile>
+            <id>load-test</id>
+            <modules>
+                <module>load-test</module>
+            </modules>
+        </profile>
+    </profiles>
+
     <build>
         <pluginManagement>
             <plugins>

@@ -63,6 +63,12 @@ class OutboxIntegrationTest extends AbstractIntegrationTest {
         assertThat(payload.get("installmentCount").asInt()).isEqualTo(3);
         // Kart numarası ve CVV Kafka'ya asla yazılmamalı (PCI DSS)
         assertThat(record.value()).doesNotContain("5400617020092306").doesNotContain("cvv");
+
+        // HTTP isteğinin trace'i outbox'tan geçip Kafka mesajına taşındı; relay başka thread'de çalışsa da trace aynı
+        String storedTraceParent = outboxEventRepository.findFirstByAggregateIdOrderByIdDesc(paymentId).orElseThrow().getTraceParent();
+        assertThat(storedTraceParent).matches("00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]");
+        String traceId = storedTraceParent.split("-")[1];
+        assertThat(header(record, "traceparent")).isNotNull().contains(traceId);
     }
 
     @Test

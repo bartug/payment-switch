@@ -14,13 +14,16 @@ import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxCleanupJob;
 import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxEventRepository;
 import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxProperties;
 import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxRelay;
+import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxRelayTrigger;
 import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxService;
 import com.bartugsevindik.paymentswitch.messaging.outbox.OutboxServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.binder.MeterBinder;
+import io.micrometer.tracing.Tracer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -58,14 +61,23 @@ public class MessagingAutoConfiguration {
     public static final String DLT_SUFFIX = ".DLT";
 
     @Bean
-    public OutboxService outboxService(OutboxEventRepository repository, OutboxProperties properties, ObjectMapper objectMapper) {
-        return new OutboxServiceImpl(repository, properties, objectMapper);
+    public OutboxRelayTrigger outboxRelayTrigger(OutboxProperties properties) {
+        return new OutboxRelayTrigger(properties.isWakeUpOnCommit());
+    }
+
+    @Bean
+    public OutboxService outboxService(OutboxEventRepository repository, OutboxProperties properties, ObjectMapper objectMapper,
+                                       ObjectProvider<Tracer> tracer, OutboxRelayTrigger relayTrigger) {
+        return new OutboxServiceImpl(repository, properties, objectMapper, tracer.getIfAvailable(), relayTrigger);
     }
 
     @Bean
     public OutboxRelay outboxRelay(OutboxEventRepository repository, KafkaTemplate<String, String> kafkaTemplate,
-                                   TransactionTemplate transactionTemplate, OutboxProperties properties) {
-        return new OutboxRelay(repository, kafkaTemplate, transactionTemplate, properties);
+                                   TransactionTemplate transactionTemplate, OutboxProperties properties,
+                                   ObjectProvider<Tracer> tracer, OutboxRelayTrigger relayTrigger) {
+        OutboxRelay relay = new OutboxRelay(repository, kafkaTemplate, transactionTemplate, properties, tracer.getIfAvailable());
+        relayTrigger.setRelay(relay);
+        return relay;
     }
 
     @Bean

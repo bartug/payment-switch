@@ -102,6 +102,9 @@ hangi bankaya gittiğini gösterir. Test kartları ve routing senaryoları: [doc
 | `BUSINESS_DAY_CUTOFF` | `23:30` | Bu saatten sonra o günün ödemeleri iptal edilemez, sadece iade edilebilir (İstanbul saati) |
 | `BANK_FILE_BASE_URL` | `http://localhost:8090` | Bankaların gün sonu dosyalarının alındığı adres (lokalde simülatör) |
 | `WEBHOOK_POLL_INTERVAL` | `1s` | Webhook dispatcher'ın bekleyen bildirimlere bakma aralığı |
+| `TRACING_SAMPLING` | `1.0` | Trace örnekleme oranı. Production'da 0.01–0.1 |
+| `OTLP_TRACING_ENDPOINT` | `http://localhost:4318/v1/traces` | Jaeger / OTel Collector |
+| `PAYMENT_CONSUMER_CONCURRENCY` | `3` | payment-api consumer thread sayısı. Listener sayısı × bu değer < DB havuzu olmalı |
 | `ROUTING_CONSUMER_CONCURRENCY` | `3` | routing-service consumer thread sayısı. Partition sayısından fazlası boşta kalır. |
 | `SPRING_PROFILES_ACTIVE` | - | `production` açıldığında Swagger kapanır, loglar ECS formatına geçer |
 
@@ -206,7 +209,19 @@ curl -s -X PUT localhost:8082/v1/admin/banks/YKB/passive
 curl -s -X PUT localhost:8082/v1/admin/banks/YKB/active
 ```
 
-Prometheus, Grafana ve Jaeger PS-8 ile eklenecek.
+### Tracing, metrik ve yük testi
+
+```bash
+docker compose --profile observability up -d     # Jaeger :16686, Prometheus :9090, Grafana :3000
+./mvnw -Pload-test -pl load-test gatling:test -Drps=100 -Dduration=60 -Dterminals=20
+```
+
+- Alarm kuralları: `infra/prometheus/alerts.yml` (outbox gecikmesi, açık circuit, uçtan uca p99, UNKNOWN oranı, MANUAL_REVIEW, mutabakat)
+- Dashboard: `infra/grafana/dashboards/payment-switch.json`
+- Yük testinden önce bir ısınma turu yapın; ilk ~40 sn'de JIT ve havuzların dolması gecikmeyi şişirir.
+- Laptop'ta uzun test: `caffeinate -dims ./mvnw ...` (uyku modu testi bozar, bkz. docs/08)
+
+Ölçüm sonuçları ve ölçekleme kuralları: [docs/08-olcekleme-ve-gozlemlenebilirlik.md](docs/08-olcekleme-ve-gozlemlenebilirlik.md)
 
 ## 🚀 Deploy
 

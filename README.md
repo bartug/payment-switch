@@ -20,6 +20,7 @@ Routing: [docs/04-routing.md](docs/04-routing.md) ·
 Banka entegrasyonu: [docs/05-banka-entegrasyonu.md](docs/05-banka-entegrasyonu.md) ·
 Webhook: [docs/06-webhook.md](docs/06-webhook.md) ·
 Ledger ve mutabakat: [docs/07-ledger-ve-mutabakat.md](docs/07-ledger-ve-mutabakat.md) ·
+Ölçekleme ve gözlemlenebilirlik: [docs/08-olcekleme-ve-gozlemlenebilirlik.md](docs/08-olcekleme-ve-gozlemlenebilirlik.md) ·
 Kararlar: [docs/adr](docs/adr) · Ortam kurulumu: [DEVOPS.md](DEVOPS.md)
 
 ## 1. Geliştirme Ortamı
@@ -37,6 +38,10 @@ docker compose up -d
 ./mvnw -pl bank-adapter spring-boot:run
 ./mvnw -pl bank-simulator spring-boot:run
 ```
+
+Gözlemlenebilirlik: `docker compose --profile observability up -d` → [Jaeger](http://localhost:16686) · [Grafana](http://localhost:3000) · [Prometheus](http://localhost:9090)
+
+Yük testi: `./mvnw -Pload-test -pl load-test gatling:test -Drps=100 -Dduration=60`
 
 Swagger: [payment-api](http://localhost:8081/swagger-ui.html) · [routing-service](http://localhost:8082/swagger-ui.html) ·
 [bank-adapter](http://localhost:8083/swagger-ui.html) · [bank-simulator](http://localhost:8090/swagger-ui.html)
@@ -66,7 +71,7 @@ Swagger: [payment-api](http://localhost:8081/swagger-ui.html) · [routing-servic
 | PS-6 | Merchant webhook ([docs/06-webhook.md](docs/06-webhook.md)) | ✅ |
 | PS-6 | Void ve kısmi refund ([ADR-007](docs/adr/ADR-007-webhook-iptal-iade.md)) | ✅ |
 | PS-7 | Double-entry ledger, iki yönlü mutabakat ([ADR-008](docs/adr/ADR-008-ledger-ve-mutabakat.md)) | ✅ |
-| PS-8 | Ölçekleme, OpenTelemetry, Gatling | ⏳ |
+| PS-8 | OpenTelemetry, Prometheus/Grafana, Gatling yük testi ([ADR-009](docs/adr/ADR-009-gozlemlenebilirlik-ve-performans.md)) | ✅ |
 
 ## 4. Kod Kalitesi
 

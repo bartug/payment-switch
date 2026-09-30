@@ -69,6 +69,12 @@ public class OutboxEvent extends BaseEntity {
     @Column(name = "last_error", length = 512)
     private String lastError;
 
+    /**
+     * Event yazıldığı andaki trace context (W3C traceparent). Relay gönderirken geri yükler.
+     */
+    @Column(name = "trace_parent", length = 55)
+    private String traceParent;
+
     public void markPublished(LocalDateTime now) {
         this.publishedAt = now;
         this.attempts = attempts + 1;

@@ -43,7 +43,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-@SpringBootTest(properties = "application.scheduling.enabled=false")
+@SpringBootTest(properties = {"application.scheduling.enabled=false", "management.otlp.tracing.export.enabled=false",
+        "application.outbox.wake-up-on-commit=false"})
 class RoutingIntegrationTest {
 
     @ServiceConnection

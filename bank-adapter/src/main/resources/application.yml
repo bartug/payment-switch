@@ -31,6 +31,9 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    template:
+      # Producer span'ı ve traceparent header'ı; consumer tarafında trace buradan devam eder
+      observation-enabled: true
     consumer:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -40,6 +43,8 @@ spring:
         # Banka çağrısı birkaç saniye sürebilir; tek poll'daki mesaj sayısı düşük tutulur ki
         # max.poll.interval aşılıp gereksiz rebalance olmasın
         max.poll.records: 10
+    listener:
+      observation-enabled: true
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -66,6 +71,17 @@ management:
     health:
       probes:
         enabled: true
+  tracing:
+    sampling:
+      # Lokalde her istek izlenir; production'da %1-10 yeterli (TRACING_SAMPLING=0.05)
+      probability: ${TRACING_SAMPLING:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 logging:
   level:
